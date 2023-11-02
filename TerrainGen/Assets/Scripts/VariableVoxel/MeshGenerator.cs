@@ -35,6 +35,8 @@ public class MeshGenerator : MonoBehaviour
             {
                 Destroy(objects[i]);
             }
+
+            objects.Clear();    
         }
     }
 
@@ -71,15 +73,14 @@ public class MeshGenerator : MonoBehaviour
 
             }
         }
-      //  Debug.Log($"number of vertices: {vertices.Count}");
 
         mesh = new Mesh();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
 
         mesh.RecalculateNormals();
-        triangles.Clear();
-        vertices.Clear();
+      
 
 
         GameObject go = new GameObject();
@@ -90,11 +91,15 @@ public class MeshGenerator : MonoBehaviour
         go.transform.position = new Vector3(offset.y, 0, offset.x);
         go.name = $"chunk_{offset.y}_{offset.x}";
 
+       // Debug.Log($"number of vertices: {vertices.Count} chunk: {go.name} voxelSize: {voxelSize}");
         
 
       //  go.transform.SetParent(this.transform, false);
         objects.Add(go);
-       
+
+        triangles.Clear();
+        vertices.Clear();
+
     }
 
     void MarchCube(Vector3 position, int voxelSize)
