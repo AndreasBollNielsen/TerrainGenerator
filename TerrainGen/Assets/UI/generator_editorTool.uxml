@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="project://database/Assets/UI/generator_editorTool.uss?fileID=7433441132597879392&amp;guid=4ddbf243f08ccd348ad18a0ebc3d4916&amp;type=3#generator_editorTool" />
+    <ui:Label text="Hole Generator Editor" style="justify-content: flex-start; align-items: center; flex-grow: 0; flex-direction: column; align-self: center; font-size: 30px;" />
+    <ui:VisualElement style="flex-grow: 1; background-color: rgba(0, 0, 0, 0); flex-direction: column-reverse; align-items: stretch; justify-content: flex-start;">
+        <ui:Button text="Reset terrain" display-tooltip-when-elided="true" name="Clear_Button" />
+        <ui:Button text="Cancel Building" display-tooltip-when-elided="true" name="Cancel_Button" style="visibility: visible; display: none;" />
+        <ui:Button text="Generate Holes" display-tooltip-when-elided="true" name="Generate_Button" />
+    </ui:VisualElement>
+    <ui:VisualElement style="flex-grow: 1; background-color: rgba(0, 0, 0, 0); flex-direction: column-reverse;">
+        <ui:ProgressBar value="0" title="Generating..." name="Progress" style="-unity-background-image-tint-color: rgb(255, 255, 255); display: none; visibility: visible;" />
+    </ui:VisualElement>
+</ui:UXML>

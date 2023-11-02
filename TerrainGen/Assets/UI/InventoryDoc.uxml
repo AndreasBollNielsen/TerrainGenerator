@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:VisualElement style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.44); width: 46%; height: 0; justify-content: flex-start; align-items: flex-start; align-self: flex-end; margin-left: 20px; margin-right: 20px; margin-top: 20px; margin-bottom: 20px;">
+        <ui:Label tabindex="-1" text="Inventory" display-tooltip-when-elided="true" style="opacity: 1; align-items: auto; justify-content: flex-end; align-self: center; font-size: 30px; -unity-text-outline-color: rgba(0, 0, 0, 0); color: rgb(255, 255, 255);" />
+        <ui:VisualElement name="ItemsContainer" style="flex-grow: 0; background-color: rgba(0, 0, 0, 0); flex-direction: row; flex-wrap: wrap; width: auto; flex-basis: auto; flex-shrink: 1; max-width: none; max-height: none; min-width: auto; min-height: auto; align-self: auto; align-items: flex-start; justify-content: flex-start; height: 500px;" />
+    </ui:VisualElement>
+</ui:UXML>

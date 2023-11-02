@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:Button display-tooltip-when-elided="true" style="width: 100px; height: 100px; max-width: 100px; min-width: 100px; max-height: 100px; min-height: 100px;">
+        <ui:Label tabindex="-1" text="100" display-tooltip-when-elided="true" name="ItemsCount" style="justify-content: flex-start; align-items: auto; align-self: center; flex-direction: column; width: 100%; flex-wrap: nowrap; -unity-text-align: lower-center; position: relative; left: auto; top: 25px; color: rgb(255, 255, 255); font-size: 20px; text-shadow: 1.1px 1.7px 0 rgb(0, 0, 0);" />
+        <ui:Button display-tooltip-when-elided="true" name="Discard" style="align-items: stretch; justify-content: flex-start; align-self: center; -unity-text-align: upper-left; white-space: nowrap; text-overflow: ellipsis; top: 25px; right: -40px; width: 10px; height: 10px; font-size: 7px; background-image: url(&apos;project://database/Assets/Textures/heart.jpg?fileID=21300000&amp;guid=55b75f55d99771c4080c6ecfc542f9b6&amp;type=3#heart&apos;);" />
+    </ui:Button>
+</ui:UXML>
