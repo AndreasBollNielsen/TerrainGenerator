@@ -47,7 +47,11 @@ public class VoxelGenerator : MonoBehaviour
             {
                 InitializeHeightmap(xtile, ytile);
 
-                Debug.Log($"chunksize: {currentChunkSizeX}/{currentChunkSizeZ} MaxChunkWidth: {maxChunkWidth}");
+                
+
+                Debug.Log($" tiles: {xtile}:{ytile} new width: {maxChunkWidth}");
+                Debug.Log(Mathf.Pow(2, (xtile + ytile) + 1));
+
 
                 //iterating each chunk inside a tile
                 for (int x = 0; x < currentChunkSizeX; x++)
@@ -84,11 +88,18 @@ public class VoxelGenerator : MonoBehaviour
                 currentChunkSizeZ /= 2;
                 currentChunkSizeZ = Mathf.Max(1, currentChunkSizeZ);
 
+
+                //calc dist from tile 0
+                //Vector3 origin = tiles[0].GetTileObject().transform.position;
+                //float dist = Vector3.Distance(origin, terrainTile.transform.position);
+                //int tilepos = Mathf.FloorToInt(dist / heightmapWidth);
+
                 //calculate max chunkwidth
                 maxChunkWidth = Mathf.FloorToInt(width * Mathf.Pow(2, (xtile + ytile) + 1));
                 maxChunkWidth = Mathf.Clamp(maxChunkWidth, 256, 2048);
 
-                Debug.Log($"chunkWidth: {maxChunkWidth} tiles: {xtile}:{ytile} total: {width * Mathf.Pow(2, (xtile + ytile) + 1)}");
+               
+
             }
         }
 
@@ -136,7 +147,7 @@ public class VoxelGenerator : MonoBehaviour
     void InitializeHeightmap(int x, int y)
     {
         string textureName = $"Textures\\heightmap_{x}_{y}";
-       // Debug.Log(textureName);
+        // Debug.Log(textureName);
         Texture2D heightmapTexture = Resources.Load<Texture2D>(textureName);
 
         if (heightmapTexture != null)
