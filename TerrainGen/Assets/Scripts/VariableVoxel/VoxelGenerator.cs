@@ -1,7 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
+using UnityEditor.Rendering;
 using UnityEngine;
+using static UnityEngine.EventSystems.EventTrigger;
 
 
 public class VoxelGenerator : MonoBehaviour
@@ -25,32 +28,81 @@ public class VoxelGenerator : MonoBehaviour
     int currentChunkSizeX;
     int currentChunkSizeZ;
     int maxChunkWidth;
+    [SerializeField] Vector3 Origin;
 
     [SerializeField] Color startColor = Color.blue;  // Color for low DistanceToSurface values
     [SerializeField] Color endColor = new Color(1, 0, 0, 0);     // Color for high DistanceToSurface values
     [SerializeField] bool debug;
+    TerrainTile[,] tiles;
 
-    List<TerrainTile> tiles = new List<TerrainTile>();
-
+    // List<TerrainTile> tiles = new List<TerrainTile>();
+    // Dictionary<Vector2, TerrainTile> tiles = new Dictionary<Vector2, TerrainTile>();
 
 
     private void Start()
     {
         currentVoxelSize = voxelSize;
-        maxChunkWidth = width;
+        //  maxChunkWidth = width;
+
         currentChunkSizeX = maxXchunks;
         currentChunkSizeZ = maxZchunks;
+        InitializeTileMap();
 
         for (int xtile = 0; xtile < maxXTiles; xtile++)
         {
+
+
             for (int ytile = 0; ytile < maxZTiles; ytile++)
             {
                 InitializeHeightmap(xtile, ytile);
 
-                
+                GameObject go = new GameObject();
+                go.AddComponent<TextMeshProUGUI>().text = tiles[xtile, ytile].Width.ToString();
 
-                Debug.Log($" tiles: {xtile}:{ytile} new width: {maxChunkWidth}");
-                Debug.Log(Mathf.Pow(2, (xtile + ytile) + 1));
+
+                ////calculate max chunkwidth
+                //maxChunkWidth = Mathf.FloorToInt(width * Mathf.Pow(2, ytile + xtile ));
+                //maxChunkWidth = Mathf.Clamp(maxChunkWidth, 256, 2048);
+                //Debug.Log($" tiles: {xtile}:{ytile} new width: {maxChunkWidth}");
+
+
+                // Calculate max chunk width based on tile position
+                maxChunkWidth = width * (ytile + 1);
+                maxChunkWidth = Mathf.Clamp(maxChunkWidth, 256, 2048);
+                Debug.Log(maxChunkWidth);
+                // Iterate over chunks within the tile
+                int currentChunkSizeX = maxXchunks;
+                int currentChunkSizeZ = maxZchunks;
+                if (maxChunkWidth > width)
+                {
+                    ////calculate max chunks size
+                    currentChunkSizeX /= 2;
+                    currentChunkSizeX = Mathf.Max(1, currentChunkSizeX);
+                    currentChunkSizeZ /= 2;
+                    currentChunkSizeZ = Mathf.Max(1, currentChunkSizeZ);
+
+
+                }
+
+                //check neighbor
+                //Vector3 tilepos = new Vector3(ytile * heightmapWidth, (xtile - 1) * heightmapWidth);
+                //if (xtile > 0)
+                //{
+                //    TerrainTile currentTile = tiles[tilepos];
+                //    if (currentTile != null)
+                //    {
+                //        Debug.Log($"tilepos: {tilepos} currentTile: {currentTile.With} maxChunkWidth: {maxChunkWidth}");
+                //        if (currentTile.With < maxChunkWidth)
+                //        {
+                //            maxChunkWidth = currentTile.With * 2;
+                //        }
+                //        else
+                //        {
+                //            maxChunkWidth = currentTile.With;
+                //        }
+                //    }
+
+                //}
 
 
                 //iterating each chunk inside a tile
@@ -72,33 +124,36 @@ public class VoxelGenerator : MonoBehaviour
                 }
 
                 //generate new tile
-                TerrainTile tile = new TerrainTile();
+                TerrainTile tile = tiles[xtile, ytile];
                 tile.AddChunks(GetComponent<MeshGenerator>().CopyChunks());
                 GetComponent<MeshGenerator>().ClearList();
                 GameObject terrainTile = new GameObject();
                 tile.SetChunksParent(terrainTile);
-                tiles.Add(tile);
-                terrainTile.transform.position = new Vector3(heightmapWidth * xtile, 0, heightmapWidth * ytile);
+                // tile.With = maxChunkWidth;
+                Vector3 tileposition = new Vector3(heightmapWidth * xtile, 0, heightmapWidth * ytile);
+                terrainTile.transform.position = tileposition;
                 terrainTile.name = $"Tile_{xtile}_{ytile}";
                 terrainTile.transform.SetParent(gameObject.transform, false);
 
-                //calculate max chunks size
-                currentChunkSizeX /= 2;
-                currentChunkSizeX = Mathf.Max(1, currentChunkSizeX);
-                currentChunkSizeZ /= 2;
-                currentChunkSizeZ = Mathf.Max(1, currentChunkSizeZ);
+                tiles[xtile, ytile] = tile;
 
 
-                //calc dist from tile 0
+
+                ////calculate max chunks size
+                //currentChunkSizeX /= 2;
+                //currentChunkSizeX = Mathf.Max(1, currentChunkSizeX);
+                //currentChunkSizeZ /= 2;
+                //currentChunkSizeZ = Mathf.Max(1, currentChunkSizeZ);
+
+
+                ////calc dist from tile 0
                 //Vector3 origin = tiles[0].GetTileObject().transform.position;
                 //float dist = Vector3.Distance(origin, terrainTile.transform.position);
                 //int tilepos = Mathf.FloorToInt(dist / heightmapWidth);
 
-                //calculate max chunkwidth
-                maxChunkWidth = Mathf.FloorToInt(width * Mathf.Pow(2, (xtile + ytile) + 1));
-                maxChunkWidth = Mathf.Clamp(maxChunkWidth, 256, 2048);
 
-               
+
+                //Debug.Log(Mathf.FloorToInt(width * Mathf.Pow(2, tilepos + 1)));
 
             }
         }
@@ -130,6 +185,58 @@ public class VoxelGenerator : MonoBehaviour
             DisplayVoxels(xVoxels, yVoxels);
     }
 
+    void initTiles()
+    {
+        for (int x = 0; x < tiles.GetLength(0); x++)
+        {
+            for (int y = 0; y < tiles.GetLength(1); y++)
+            {
+                tiles[x, y] = new TerrainTile();
+            }
+        }
+    }
+
+    void InitializeTileMap()
+    {
+        tiles = new TerrainTile[maxXTiles, maxZTiles];
+        initTiles();
+
+        int width = tiles.GetLength(0); // Assuming a rectangular array
+        int height = tiles.GetLength(1);
+        int centerX = (int)Origin.x;
+        int centerY = (int)Origin.z;
+
+
+
+        tiles[centerX, centerY].Width = 256; // Initialize with the original value
+        int lastValue = tiles[centerX, centerY].Width;
+        int currentValue = lastValue *2;
+
+        for (int radius = 1; radius <= 10; radius++)
+        {
+            for (int angle = 0; angle < 360; angle++) // Iterate through all angles (0-359 degrees)
+            {
+                double radianAngle = angle * (Math.PI / 180); // Convert angle to radians
+                int newX = centerX + (int)(radius * Math.Cos(radianAngle));
+                int newY = centerY + (int)(radius * Math.Sin(radianAngle));
+
+                // Check if the calculated point is within the array bounds
+                if (newX >= 0 && newX < width && newY >= 0 && newY < height)
+                {
+
+                    // Update the array with the current value
+                    tiles[newX, newY].Width = currentValue;
+
+                    Debug.Log($"{newX}:{newY} value: {currentValue}");
+
+                    // Update lastValue for the next iteration
+                    lastValue = currentValue;
+                }
+            }
+             currentValue = lastValue * 2; // Calculate the current value
+        }
+    }
+
     void InitializeVoxelSize(int maxWidth)
     {
         // Calculate the number of voxels in each dimension
@@ -154,7 +261,7 @@ public class VoxelGenerator : MonoBehaviour
         {
             heightMap = heightmapTexture.GetPixels();
             heightmapWidth = heightmapTexture.width;
-            Debug.Log(heightmapWidth);
+            // Debug.Log(heightmapWidth);
         }
         else
         {
