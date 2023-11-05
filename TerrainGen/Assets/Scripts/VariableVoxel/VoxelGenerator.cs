@@ -12,8 +12,8 @@ public class VoxelGenerator : MonoBehaviour
 
     [SerializeField] int height = 4;
     [SerializeField] int width = 4;
-    [Range(1, 8)][SerializeField] int maxXchunks;
-    [Range(1, 8)][SerializeField] int maxZchunks;
+    [Range(1, 16)][SerializeField] int maxXchunks;
+    [Range(1, 16)][SerializeField] int maxZchunks;
     [Range(1, 7)][SerializeField] int maxXTiles;
     [Range(1, 7)][SerializeField] int maxZTiles;
     [Range(1, 64)][SerializeField] int voxelSize;
@@ -68,7 +68,7 @@ public class VoxelGenerator : MonoBehaviour
 
                 // Calculate max chunk width based on tile position
                 maxChunkWidth = width * (ytile + 1);
-                maxChunkWidth = Mathf.Clamp(maxChunkWidth, 256, 2048);
+                maxChunkWidth = Mathf.Clamp(maxChunkWidth, 16, 2048);
                 Debug.Log(maxChunkWidth);
                 // Iterate over chunks within the tile
                 int currentChunkSizeX = maxXchunks;
@@ -401,7 +401,7 @@ public class VoxelGenerator : MonoBehaviour
         int resolutionMultiplier = Mathf.FloorToInt(dist / 256);
 
 
-        //  Debug.Log($"resolution: {voxelSize + resolutionMultiplier} position: {chunkpos.x}_{chunkpos.y}");
+          Debug.Log($"resolution: {voxelSize + resolutionMultiplier} position: {chunkpos.x}_{chunkpos.y}");
 
         MeshGenerator generator = GetComponent<MeshGenerator>();
         generator.GenerateMesh(voxelData.Length, xVoxels, yVoxels, (voxelSize + resolutionMultiplier), new Vector2(maxChunkWidth, height), new Vector2Int(chunkpos.x, chunkpos.y));
