@@ -25,18 +25,18 @@ public class MeshGenerator : MonoBehaviour
        
     }
 
-    public void DestroyMesh()
+    public void DestroyMesh(List<GameObject> chunks)
     {
         if (mesh != null)
         {
 
             mesh.Clear();
-            for (int i = 0; i < objects.Count; i++)
+            for (int i = 0; i < chunks.Count; i++)
             {
-                Destroy(objects[i]);
+                Destroy(chunks[i]);
             }
 
-            objects.Clear();    
+           // objects.Clear();    
         }
     }
 
@@ -63,9 +63,7 @@ public class MeshGenerator : MonoBehaviour
 
 
 
-            //if(voxelPosition.x <= width-1)
-            //Debug.Log(voxelPosition + " width");
-            // Debug.Log($"width: {width-2} voxelwidth: {voxelWidth}");
+           
             //use marchingcube algorithm to generate triangles and vertices
             if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
             {
@@ -94,7 +92,7 @@ public class MeshGenerator : MonoBehaviour
        // Debug.Log($"number of vertices: {vertices.Count} chunk: {go.name} voxelSize: {voxelSize}");
         
 
-      //  go.transform.SetParent(this.transform, false);
+      
         objects.Add(go);
 
         triangles.Clear();
