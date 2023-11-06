@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 1006.8176, g: 1284.9215, b: 1905.803, a: 1}
+  m_IndirectSpecularColor: {r: 1008.31665, g: 1286.6892, b: 1908.8635, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -685,11 +685,10 @@ MonoBehaviour:
   width: 256
   maxXchunks: 8
   maxZchunks: 8
-  maxXTiles: 7
-  maxZTiles: 7
-  voxelSize: 16
+  maxXTiles: 2
+  maxZTiles: 2
+  voxelSize: 64
   displayThreshold: -10
-  Origin: {x: 0, y: 0, z: 0}
   startColor: {r: 0.066957, g: 1, b: 0, a: 0.7882353}
   endColor: {r: 1, g: 0, b: 0, a: 0}
   debug: 0
