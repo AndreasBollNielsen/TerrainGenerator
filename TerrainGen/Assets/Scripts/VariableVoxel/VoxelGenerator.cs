@@ -27,7 +27,7 @@ public class VoxelGenerator : MonoBehaviour
     int heightmapWidth;
     int currentChunkSizeX;
     int currentChunkSizeZ;
-    int maxChunkWidth;
+    //int maxChunkWidth;
 
 
     [SerializeField] Color startColor = Color.blue;  // Color for low DistanceToSurface values
@@ -61,29 +61,32 @@ public class VoxelGenerator : MonoBehaviour
 
 
                 // Calculate max chunk width based on tile position
-                maxChunkWidth = tiles[xtile, ytile].Width;
+                int maxChunkWidth = tiles[xtile, ytile].Width;
                 int currentChunkSizeX = tiles[xtile, ytile].NumChunks;
                 int currentChunkSizeZ = currentChunkSizeX;
 
 
 
                 //iterating each chunk inside a tile
-                for (int x = 0; x < currentChunkSizeX; x++)
-                {
-                    for (int z = 0; z < currentChunkSizeZ; z++)
-                    {
-                        //initialize voxelsize
-                        InitializeVoxelSize(maxChunkWidth);
-
-                        // Generate the voxel structure
-                        GenerateVoxelStructure(maxChunkWidth * x, maxChunkWidth * z);
-
-                        // generate mesh
-                        GenerateMesh(new Vector2Int(maxChunkWidth * x, maxChunkWidth * z), new Vector2Int(heightmapWidth * xtile, heightmapWidth * ytile), maxChunkWidth);
+                GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(xtile, ytile));
 
 
-                    }
-                }
+                //for (int x = 0; x < currentChunkSizeX; x++)
+                //{
+                //    for (int z = 0; z < currentChunkSizeZ; z++)
+                //    {
+                //        //initialize voxelsize
+                //        InitializeVoxelSize(maxChunkWidth);
+
+                //        // Generate the voxel structure
+                //        GenerateVoxelStructure(maxChunkWidth * x, maxChunkWidth * z);
+
+                //        // generate mesh
+                //        GenerateMesh(new Vector2Int(maxChunkWidth * x, maxChunkWidth * z), new Vector2Int(heightmapWidth * xtile, heightmapWidth * ytile), maxChunkWidth);
+
+
+                //    }
+                //}
 
                 //generate new tile
                 TerrainTile tile = tiles[xtile, ytile];
@@ -97,7 +100,7 @@ public class VoxelGenerator : MonoBehaviour
                 terrainTile.transform.SetParent(gameObject.transform, false);
 
                 tiles[xtile, ytile] = tile;
-
+                tiles[xtile, ytile].LODChanged += VoxelGenerator_LODChanged;
             }
         }
 
@@ -105,8 +108,28 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
+       // Invoke("testDynamicLOD", 5);
 
+    }
 
+    void GenerateChunks(int chunkSizeX, int chunkSizeZ, int chunkWidth, Vector2Int tilepos)
+    {
+        for (int x = 0; x < chunkSizeX; x++)
+        {
+            for (int z = 0; z < chunkSizeZ; z++)
+            {
+                //initialize voxelsize
+                InitializeVoxelSize(chunkWidth);
+
+                // Generate the voxel structure
+                GenerateVoxelStructure(chunkWidth * x, chunkWidth * z);
+
+                // generate mesh
+                GenerateMesh(new Vector2Int(chunkWidth * x, chunkWidth * z), new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y), chunkWidth);
+
+               
+            }
+        }
     }
 
     private void OnDrawGizmos()
@@ -140,8 +163,8 @@ public class VoxelGenerator : MonoBehaviour
                             break;
                     }
                     Gizmos.color = col;
-                    Vector3 cubepos = new Vector3(x * 2048.2f, 0, y * 2048.2f) + new Vector3(1024, 0, 1024);
-                    Gizmos.DrawWireCube(cubepos, new Vector3(2048, 5, 2048));
+                    Vector3 cubepos = new Vector3(x * 2048.2f, 1024, y * 2048.2f) + new Vector3(1024, 0, 1024);
+                    Gizmos.DrawWireCube(cubepos, new Vector3(2048, 2000, 2048));
 
                     if (tiles[x, y].Width == 0)
                         Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
@@ -159,16 +182,16 @@ public class VoxelGenerator : MonoBehaviour
     private void Update()
     {
         // regenerate voxels on voxelsize change
-        if (currentVoxelSize != voxelSize)
-        {
-            InitializeHeightmap(0, 0);
-            InitializeVoxelSize(256);
-            GenerateVoxelStructure(0, 0);
-           // DestroyMesh();
-            GenerateMesh(Vector2Int.zero, Vector2Int.zero, 256);
+        //if (currentVoxelSize != voxelSize)
+        //{
+        //    InitializeHeightmap(0, 0);
+        //    InitializeVoxelSize(256);
+        //    GenerateVoxelStructure(0, 0);
+        //    // DestroyMesh();
+        //    GenerateMesh(Vector2Int.zero, Vector2Int.zero, 256);
 
-            currentVoxelSize = voxelSize;
-        }
+        //    currentVoxelSize = voxelSize;
+        //}
 
         if (debug)
         {
@@ -208,21 +231,49 @@ public class VoxelGenerator : MonoBehaviour
                 }
                 else
                 {
-                    tiles[x, y] = new TerrainTile(x,y);
-                    tiles[x, y].LODChanged += VoxelGenerator_LODChanged;
+                    tiles[x, y] = new TerrainTile(x, y);
+
                 }
             }
         }
     }
 
+    void testDynamicLOD()
+    {
+        player.position = new Vector3(2500,0, 1024);
+       // VoxelGenerator_LODChanged(new Vector2Int(1, 0));
+       
+    }
     private void VoxelGenerator_LODChanged(Vector2Int tilepos)
     {
+        //if(numChanges > 0)
+        //{
+        //    return;
+        //}
 
+        Debug.Log("rebuilding " + tilepos);
         //update mesh chunk per tile
         DestroyMesh(tilepos);
 
+        //generate new mesh chunk
+       // Calculate max chunk width based on tile position
+        int maxChunkWidth = tiles[tilepos.x, tilepos.y].Width;
+        int currentChunkSizeX = tiles[tilepos.x, tilepos.y].NumChunks;
+        int currentChunkSizeZ = currentChunkSizeX;
+
+      //  Debug.Log($"chunkWidth: {maxChunkWidth} currentX {currentChunkSizeX}");
+
+        InitializeHeightmap(tilepos.x, tilepos.y);
+        GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(tilepos.x, tilepos.y));
+
+        ////copy data to tile
+        tiles[tilepos.x, tilepos.y].AddChunks(GetComponent<MeshGenerator>().CopyChunks());
+        GetComponent<MeshGenerator>().ClearList();
+        tiles[tilepos.x, tilepos.y].SetChunksParent(tiles[tilepos.x, tilepos.y].GetTileObject());
+
+        Debug.Log("finished updating mesh");
         numChanges++;
-        
+
     }
 
     void UpdateTilemap()
@@ -288,7 +339,7 @@ public class VoxelGenerator : MonoBehaviour
         int totalVoxels = xVoxels * yVoxels * zVoxels;
         voxelData = new VoxelData[totalVoxels];
 
-        // Debug.Log("voxels initialized");
+       //  Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels} yvoxels {yVoxels} zvoxels {zVoxels} maxwidth: {maxWidth}");
     }
 
     void InitializeHeightmap(int x, int y)
@@ -301,7 +352,7 @@ public class VoxelGenerator : MonoBehaviour
         {
             heightMap = heightmapTexture.GetPixels();
             heightmapWidth = heightmapTexture.width;
-            // Debug.Log(heightmapWidth);
+           //  Debug.Log(heightmapWidth);
         }
         else
         {
@@ -437,7 +488,7 @@ public class VoxelGenerator : MonoBehaviour
 
         Vector2 compositedChunk = new Vector2(chunkpos.x, chunkpos.y) + tilepos;
 
-        float dist = Vector2.Distance(compositedChunk, Vector2.zero);
+        float dist = Vector2.Distance(compositedChunk, player.position);
         int resolutionMultiplier = Mathf.FloorToInt(dist / 256);
 
 
@@ -451,6 +502,6 @@ public class VoxelGenerator : MonoBehaviour
     {
         MeshGenerator generator = GetComponent<MeshGenerator>();
 
-        generator.DestroyMesh(tiles[tilepos.x,tilepos.y].RemoveChunks());
+        generator.DestroyMesh(tiles[tilepos.x, tilepos.y].RemoveChunks());
     }
 }

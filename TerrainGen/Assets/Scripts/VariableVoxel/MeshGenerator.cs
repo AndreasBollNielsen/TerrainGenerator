@@ -9,10 +9,10 @@ public class MeshGenerator : MonoBehaviour
     List<Vector3> vertices = new List<Vector3>();
     float surfaceDensity = WorldData.surfaceDensity;
     VoxelGenerator VoxelGenerator;
-    Mesh mesh;
-    // MeshFilter meshFilter;
+
+
     [SerializeField] Material material;
-    List<GameObject> objects = new List<GameObject>();
+    List<Chunk_v> chunks = new List<Chunk_v>();
     // Start is called before the first frame update
     private void Awake()
     {
@@ -22,32 +22,31 @@ public class MeshGenerator : MonoBehaviour
 
     void Start()
     {
-       
+
     }
 
-    public void DestroyMesh(List<GameObject> chunks)
+    public void DestroyMesh(List<Chunk_v> chunks)
     {
-        if (mesh != null)
+
+
+        for (int i = 0; i < chunks.Count; i++)
         {
-
-            mesh.Clear();
-            for (int i = 0; i < chunks.Count; i++)
-            {
-                Destroy(chunks[i]);
-            }
-
-           // objects.Clear();    
+            chunks[i].mesh.Clear();
+            Destroy(chunks[i].chunkObject);
         }
+
+        // objects.Clear();    
+
     }
 
-    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 worldSize,Vector2Int offset)
+    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 worldSize, Vector2Int offset)
     {
         float width = worldSize.x;
         float height = worldSize.y;
-
+        // Debug.Log($" voxellength: {voxelsLength} height {voxelHeight}");
         for (int index = 0; index < voxelsLength; index++)
         {
-           
+
 
             // Convert the 1D index to 3D coordinates
             int x = index % voxelWidth;
@@ -63,22 +62,29 @@ public class MeshGenerator : MonoBehaviour
 
 
 
-           
+
             //use marchingcube algorithm to generate triangles and vertices
             if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
             {
                 MarchCube(voxelPosition, voxelSize);
 
             }
+            //chck edges
+            if(x == 0 || x == voxelsLength - 1 || z == 0  || z == voxelsLength-1)
+            {
+                if(vertices.Count > 0)
+                Debug.Log($"edge: {vertices[vertices.Count - 1]}");
+            }
         }
 
-        mesh = new Mesh();
+
+        Mesh mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
 
         mesh.RecalculateNormals();
-      
+
 
 
         GameObject go = new GameObject();
@@ -89,11 +95,13 @@ public class MeshGenerator : MonoBehaviour
         go.transform.position = new Vector3(offset.y, 0, offset.x);
         go.name = $"chunk_{offset.y}_{offset.x}";
 
-       // Debug.Log($"number of vertices: {vertices.Count} chunk: {go.name} voxelSize: {voxelSize}");
-        
+        // Debug.Log($"number of vertices: {vertices.Count} chunk: {go.name} voxelSize: {voxelSize}");
+        Chunk_v chunk = new Chunk_v();
+        chunk.chunkObject = go;
+        chunk.mesh = mesh;
 
-      
-        objects.Add(go);
+
+        chunks.Add(chunk);
 
         triangles.Clear();
         vertices.Clear();
@@ -173,6 +181,8 @@ public class MeshGenerator : MonoBehaviour
 
         int VertForIndice(Vector3 vert, Vector3 voxelPos)
         {
+
+
             //loop through the vertices
             for (int i = 0; i < vertices.Count; i++)
             {
@@ -212,12 +222,14 @@ public class MeshGenerator : MonoBehaviour
 
     public void ClearList()
     {
-        objects.Clear();
+        chunks.Clear();
     }
 
-    public List<GameObject> CopyChunks()
+    public List<Chunk_v> CopyChunks()
     {
-        return objects;
+        return chunks;
     }
+
+
 
 }

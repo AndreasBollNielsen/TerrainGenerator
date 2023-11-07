@@ -1,12 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Entities;
+using UnityEditor.Build.Pipeline;
 using UnityEngine;
 using UnityEngine.Events;
 
 public class TerrainTile
 {
-    private List<GameObject> meshChunks;
+    private List<Chunk_v> meshChunks;
     private GameObject tileObject;
     int width;
     int numChunks;
@@ -15,12 +17,12 @@ public class TerrainTile
     public int Y;
     Dictionary<int, int> lodSelector;
     public event Action<Vector2Int> LODChanged;
-    public TerrainTile(int _x,int _y)
+    public TerrainTile(int _x, int _y)
     {
         this.X = _x;
         this.Y = _y;
 
-        meshChunks = new List<GameObject>();
+        meshChunks = new List<Chunk_v>();
 
         lodSelector = new Dictionary<int, int>() {
             {256,8 },
@@ -41,26 +43,28 @@ public class TerrainTile
                 // Set LOD level when width changes
                 if (value != 0)
                     NumChunks = lodSelector[value];
-               
+
+                width = value;
                 //trigger event when tile state changes
                 if (value > 0)
                 {
                     if (lastState != value)
                     {
                        // Debug.Log($"changed from {lastState} to {value}");
-                        LODChanged?.Invoke(new Vector2Int(X,Y));
+                      //  Debug.Log($"triggered: {Width} tilepos: {X}:{Y}");
                         lastState = value;
+                        LODChanged?.Invoke(new Vector2Int(X, Y));
                     }
                 }
             }
             // Set the new value
-            width = value;
+            //  width = value;
 
         }
     }
     public int NumChunks { get => numChunks; set => numChunks = value; }
 
-    public void AddChunks(List<GameObject> chunks)
+    public void AddChunks(List<Chunk_v> chunks)
     {
         meshChunks.Clear();
         meshChunks.AddRange(chunks);
@@ -68,10 +72,12 @@ public class TerrainTile
 
     }
 
-    public List<GameObject> RemoveChunks()
+    public List<Chunk_v> RemoveChunks()
     {
         return meshChunks;
     }
+
+
 
     public GameObject GetTileObject()
     {
@@ -82,7 +88,7 @@ public class TerrainTile
     {
         foreach (var chunk in meshChunks)
         {
-            chunk.transform.SetParent(parent.transform, false);
+            chunk.chunkObject.transform.SetParent(parent.transform, false);
 
         }
 
