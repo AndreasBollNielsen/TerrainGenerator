@@ -38,8 +38,8 @@ public class TextureGenerator : MonoBehaviour
         generatedTexture.Apply();
 
         // Save the texture as an asset
-        AssetDatabase.CreateAsset(generatedTexture, savePath);
-        AssetDatabase.SaveAssets();
+      //  AssetDatabase.CreateAsset(generatedTexture, savePath);
+      //  AssetDatabase.SaveAssets();
 
         // Assign the texture to a material or renderer for visualization
         Renderer renderer = GetComponent<Renderer>();

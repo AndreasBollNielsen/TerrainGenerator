@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+//using System.Drawing;
 using UnityEngine;
 
 
@@ -7,6 +8,7 @@ public class MeshGenerator : MonoBehaviour
 {
     List<int> triangles = new List<int>();
     List<Vector3> vertices = new List<Vector3>();
+    List<Color> colors = new List<Color>();
     float surfaceDensity = WorldData.surfaceDensity;
     VoxelGenerator VoxelGenerator;
 
@@ -42,8 +44,8 @@ public class MeshGenerator : MonoBehaviour
     public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 worldSize, Vector2Int offset)
     {
         float width = worldSize.x;
-        float height = worldSize.y;
-        // Debug.Log($" voxellength: {voxelsLength} height {voxelHeight}");
+       // float height = worldSize.y;
+         //Debug.Log($" width: {width} voxelwidth: {voxelWidth}");
         for (int index = 0; index < voxelsLength; index++)
         {
 
@@ -64,17 +66,12 @@ public class MeshGenerator : MonoBehaviour
 
 
             //use marchingcube algorithm to generate triangles and vertices
-            if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
-            {
-                MarchCube(voxelPosition, voxelSize);
+            //if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
+            //{
 
-            }
-            //chck edges
-            if(x == 0 || x == voxelsLength - 1 || z == 0  || z == voxelsLength-1)
-            {
-                if(vertices.Count > 0)
-                Debug.Log($"edge: {vertices[vertices.Count - 1]}");
-            }
+            //}
+            MarchCube(voxelPosition, voxelSize, (int)(width /* + 14*/));
+
         }
 
 
@@ -82,7 +79,7 @@ public class MeshGenerator : MonoBehaviour
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
-
+        mesh.colors = colors.ToArray();
         mesh.RecalculateNormals();
 
 
@@ -105,10 +102,11 @@ public class MeshGenerator : MonoBehaviour
 
         triangles.Clear();
         vertices.Clear();
+        colors.Clear();
 
     }
 
-    void MarchCube(Vector3 position, int voxelSize)
+    void MarchCube(Vector3 position, int voxelSize, int width)
     {
 
 
@@ -193,12 +191,61 @@ public class MeshGenerator : MonoBehaviour
                 }
             }
 
+            Color color = Color.white;
+
+            //if (vert.z >= width-10)
+            //{
+            //    Debug.Log($"vert: {vert} width: {width}");
+            //}
+
+            //chck edges
+            color = DetectEges(vert, voxelPos);
+
+            //if (color == Color.red)
+            //{
+            //    vert = new Vector3(vert.x, vert.y - 10, vert.z);
+            //}
+
             // if it does not exist in list, add it to the list
             vertices.Add(vert);
+            //  colors.Add(color);
             // var colorIndex = WorldGenerator.Instance.terrainMap[WorldToVoxelIndex(voxelPos.x, voxelPos.y, voxelPos.z)].TexIndex;
             // colors.Add(GetColorIndex(colorIndex));
 
+
+
             return vertices.Count - 1;
+        }
+
+        Color DetectEges(Vector3 vert, Vector3 voxelPos)
+        {
+            Color color = Color.white;
+
+            //detect top edge
+            if (vert.z == width)
+            {
+                return Color.red;
+            }
+            //detect bottom edge
+            else if (vert.z == 0)
+            {
+                return Color.red;
+            }
+            //detect left edge
+            else if (vert.x == width)
+            {
+                return Color.red;
+            }
+            //detect right edge
+            else if (vert.x == 0)
+            {
+                return Color.red;
+            }
+
+
+            return color;
+
+
         }
 
         int GetCubeConfiguration(float[] cube)

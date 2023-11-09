@@ -47,7 +47,7 @@ public class WorldGenerator : MonoBehaviour
         _sharedMethod = new WorldData.SharedMethod();
 
         //add event to check for changes in editor mode
-        EditorApplication.playModeStateChanged += LogPlayModeState;
+       // EditorApplication.playModeStateChanged += LogPlayModeState;
         // HeightMap = ReadTexture();
         // StartCoroutine(InitializeTerrainMap());
         if (!useJob)
@@ -56,7 +56,7 @@ public class WorldGenerator : MonoBehaviour
         }
         else
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 1; i++)
             {
                 string[] strings = heightmaps[i].name.Split("_");
 
@@ -78,22 +78,22 @@ public class WorldGenerator : MonoBehaviour
     }
 
     //fires event when editor changes play mode
-    private void LogPlayModeState(PlayModeStateChange state)
-    {
-        if (state == PlayModeStateChange.ExitingPlayMode)
-        {
-            if (chunkList.Count > 0)
-            {
+    //private void LogPlayModeState(PlayModeStateChange state)
+    //{
+    //    if (state == PlayModeStateChange.ExitingPlayMode)
+    //    {
+    //        if (chunkList.Count > 0)
+    //        {
 
-                //foreach (Chunk cnk in chunkList)
-                //{
-                //    Destroy(cnk.filter.mesh);
-                //    Destroy(cnk.chunkObject);
-                //}
-            }
-        }
-        Debug.Log(state);
-    }
+    //            //foreach (Chunk cnk in chunkList)
+    //            //{
+    //            //    Destroy(cnk.filter.mesh);
+    //            //    Destroy(cnk.chunkObject);
+    //            //}
+    //        }
+    //    }
+    //    Debug.Log(state);
+    //}
 
     IEnumerator GenerateTerrain(Vector3Int tilepos)
     {

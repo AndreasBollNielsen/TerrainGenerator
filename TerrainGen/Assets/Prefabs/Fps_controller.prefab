@@ -36,7 +36,7 @@ Transform:
   - {fileID: 1093963368769510163}
   - {fileID: 8223228381021416590}
   m_Father: {fileID: 0}
-  m_RootOrder: 3
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &95410402974351732
 MonoBehaviour:
@@ -96,6 +96,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54248eb3fb5cc1948ab9d78b96f9f6c4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  rayOrigin: {x: 0, y: 0, z: 0}
   rayOffset: {x: 1, y: 0, z: 0}
   wallPrefab: {fileID: 5177311067146942632, guid: 6e77e60007c302843877097a0058a6cf,
     type: 3}
@@ -130,6 +131,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3015e322858477e4387bf04fb62a9b7a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  cubeSize: 2
+  graphics: {fileID: 0}
+  mat: {fileID: 0}
 --- !u!1 &3596519782813959908
 GameObject:
   m_ObjectHideFlags: 0
@@ -279,7 +283,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
+  far clip plane: 14000
   field of view: 60
   orthographic: 0
   orthographic size: 5

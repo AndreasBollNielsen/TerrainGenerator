@@ -38,7 +38,7 @@ public class Chunk
         meshRender = chunkObject.AddComponent<MeshRenderer>();
         meshRender.material = Resources.Load<Material>("Terrain");
 
-        chunkObject.tag = "Terrain";
+       // chunkObject.tag = "Terrain";
         // InitializeTerrainMap();
         GenerateMeshData();
 

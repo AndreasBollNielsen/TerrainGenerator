@@ -1,10 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Unity.Entities;
-using UnityEditor.Build.Pipeline;
 using UnityEngine;
-using UnityEngine.Events;
 
 public class TerrainTile
 {
@@ -25,6 +22,7 @@ public class TerrainTile
         meshChunks = new List<Chunk_v>();
 
         lodSelector = new Dictionary<int, int>() {
+            {128,8 },
             {256,8 },
             {512,4 },
             {1024,2 },
