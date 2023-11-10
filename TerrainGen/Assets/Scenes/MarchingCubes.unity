@@ -682,9 +682,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   height: 2000
-  width: 256
-  maxXchunks: 1
-  maxZchunks: 1
+  width: 128
+  maxXchunks: 16
+  maxZchunks: 16
   maxXTiles: 1
   maxZTiles: 1
   voxelSize: 32

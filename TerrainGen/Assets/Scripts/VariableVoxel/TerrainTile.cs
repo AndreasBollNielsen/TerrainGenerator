@@ -6,6 +6,7 @@ using UnityEngine;
 public class TerrainTile
 {
     private List<Chunk_v> meshChunks;
+    private List<Block> blocks;
     private GameObject tileObject;
     int width;
     int numChunks;
@@ -20,9 +21,10 @@ public class TerrainTile
         this.Y = _y;
 
         meshChunks = new List<Chunk_v>();
+        blocks = new List<Block>();
 
         lodSelector = new Dictionary<int, int>() {
-            {128,8 },
+            {128,16 },
             {256,8 },
             {512,4 },
             {1024,2 },

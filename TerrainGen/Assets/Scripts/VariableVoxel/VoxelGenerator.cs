@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices.WindowsRuntime;
 using TMPro;
 using UnityEditor.Rendering;
 using UnityEngine;
@@ -12,12 +13,12 @@ public class VoxelGenerator : MonoBehaviour
 
     [SerializeField] int height;
     [SerializeField] int width;
-    [Range(1, 8)][SerializeField] int maxXchunks;
-    [Range(1, 8)][SerializeField] int maxZchunks;
+    [Range(1, 16)][SerializeField] int maxXchunks;
+    [Range(1, 16)][SerializeField] int maxZchunks;
     [Range(1, 7)][SerializeField] int maxXTiles;
     [Range(1, 7)][SerializeField] int maxZTiles;
     [Range(1, 64)][SerializeField] int voxelSize;
-    [Range(-10, 100)][SerializeField] float displayThreshold;
+    [Range(-100, 100)][SerializeField] float displayThreshold;
 
     int xVoxels;
     int yVoxels;
@@ -26,7 +27,7 @@ public class VoxelGenerator : MonoBehaviour
     Color[] heightMap;
     // Color[] WaterMap;
     int heightmapWidth;
-
+    List<Block> blocks;
     //int maxChunkWidth;
 
 
@@ -67,6 +68,7 @@ public class VoxelGenerator : MonoBehaviour
                 int maxChunkWidth = tiles[xtile, ytile].Width;
                 int currentChunkSizeX = tiles[xtile, ytile].NumChunks;
                 int currentChunkSizeZ = currentChunkSizeX;
+                Debug.Log(currentChunkSizeX);
 
                 if (maxXchunks < currentChunkSizeX)
                 {
@@ -81,8 +83,11 @@ public class VoxelGenerator : MonoBehaviour
                 //iterating each chunk inside a tile
                 GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(xtile, ytile));
 
-
-
+              blocks =  GenerateBlocks(xtile, ytile);
+                foreach (var block in blocks)
+                {
+                    Debug.Log(block.Width);
+                }
 
                 //generate new tile
                 TerrainTile tile = tiles[xtile, ytile];
@@ -120,6 +125,11 @@ public class VoxelGenerator : MonoBehaviour
         {
             for (int z = 0; z < numChunkZ; z++)
             {
+                //if(x < 3 &&  z < 3)
+                //{
+                //    continue;
+                //}
+
                 //initialize voxelsize
                 InitializeVoxelSize(chunkWidth);
 
@@ -131,9 +141,33 @@ public class VoxelGenerator : MonoBehaviour
                 Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
                 GenerateMesh(chunkPos, tileposOffset, chunkWidth);
 
-                Debug.Log($"chunk: {x}:{z} Done!");
+               // Debug.Log($"chunk: {x}:{z} Done!");
             }
         }
+    }
+
+    List<Block> GenerateBlocks(int tileX,int tileY)
+    {
+        TerrainTile tile = tiles[tileX, tileY];
+        List<Block> filledBlocks = new List<Block>();
+
+        float maxRadius = Mathf.Sqrt(2) * 2048 / 2.0f;
+        Debug.Log("radius " +maxRadius);
+        for (float radius = 0; radius <= maxRadius; radius += 128)
+        {
+            int blockWidth = Mathf.Clamp((int)radius, 128, 1024);
+
+            //Block block = new Block
+            //{
+            //    Width = blockWidth
+            //    //Chunks = CalculateChunks(tile, blockWidth)
+            //};
+            Block block = new Block(blockWidth);
+
+            filledBlocks.Add(block);
+        }
+
+        return filledBlocks;
     }
 
     private void OnDrawGizmos()
@@ -144,6 +178,13 @@ public class VoxelGenerator : MonoBehaviour
 
         if (Application.isPlaying)
         {
+
+            if (debug)
+            {
+                DisplayVoxels(xVoxels + 1, yVoxels + 1);
+
+            }
+
             if (!DebugTiles)
             {
                 return;
@@ -157,6 +198,9 @@ public class VoxelGenerator : MonoBehaviour
 
                     switch (tiles[x, y].Width)
                     {
+                        case 128:
+                            col = Color.cyan;
+                            break;
                         case 256:
                             col = Color.green;
                             break;
@@ -182,7 +226,41 @@ public class VoxelGenerator : MonoBehaviour
             }
 
 
+            ////draw blocks
+            //for (int x = 0; x < blocks.GetLength(0); x++)
+            //{
+            //    for (int y = 0; y < blocks.GetLength(0); y++)
+            //    {
+            //        Color col = new Color(0, 0, 0);
 
+            //        switch (tiles[x, y].Width)
+            //        {
+            //            case 128:
+            //                col = Color.cyan;
+            //                break;
+            //            case 256:
+            //                col = Color.green;
+            //                break;
+            //            case 512:
+            //                col = Color.blue;
+            //                break;
+            //            case 1024:
+            //                col = Color.yellow;
+            //                break;
+            //            case 2048:
+            //                col = Color.red;
+            //                break;
+            //            default:
+            //                break;
+            //        }
+            //        Gizmos.color = col;
+            //        Vector3 cubepos = new Vector3(x * 2048.2f, 1024, y * 2048.2f) + new Vector3(1024, 0, 1024);
+            //        Gizmos.DrawWireCube(cubepos, new Vector3(2048, 2000, 2048));
+
+            //        // if (tiles[x, y].Width == 0)
+            //        //  Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
+            //    }
+            //}
 
 
         }
@@ -193,11 +271,11 @@ public class VoxelGenerator : MonoBehaviour
     {
 
 
-        if (debug)
-        {
-            DisplayVoxels(xVoxels + 1, yVoxels + 1);
+        //if (debug)
+        //{
+        //    DisplayVoxels(xVoxels + 1, yVoxels + 1);
 
-        }
+        //}
 
         // Debug.Log($"playerpos: {player.position} lastpos: {lastpos}");
 
@@ -324,23 +402,23 @@ public class VoxelGenerator : MonoBehaviour
                 }
             }
             currentValue = lastValue * 2; // Calculate the current value
-            currentValue = Mathf.Clamp(currentValue, 256, 2048);
+            currentValue = Mathf.Clamp(currentValue, 128, 2048);
         }
     }
 
     void InitializeVoxelSize(int maxWidth)
     {
-        int h =Mathf.RoundToInt( (float)height / voxelSize);
+       
         // Calculate the number of voxels in each dimension
         xVoxels = maxWidth / voxelSize;
-        yVoxels = Mathf.FloorToInt( (float)height / (float)voxelSize);
+        yVoxels = Mathf.CeilToInt( (float)height / voxelSize);
         zVoxels = xVoxels;
-        Debug.Log(h);
+        
         // Initialize the voxelData array based on the calculated dimensions
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         voxelData = new VoxelData[totalVoxels];
 
-        // Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels+1} yvoxels {yVoxels+1} zvoxels {zVoxels+1} maxwidth: {maxWidth}");
+         Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels+1} yvoxels {yVoxels+1} zvoxels {zVoxels+1} maxwidth: {maxWidth}");
     }
 
     void InitializeHeightmap(int x, int y)
@@ -370,6 +448,7 @@ public class VoxelGenerator : MonoBehaviour
     {
         int voxelWidth = xVoxels + 1;
         int voxelHeight = yVoxels + 1;
+        int highestlevel = 0;
 
         for (int _index = 0; _index < voxelData.Length; _index++)
         {
@@ -390,7 +469,6 @@ public class VoxelGenerator : MonoBehaviour
             // Apply offsets
             x += xOffset;
             z += zOffset;
-
 
             //using perlin noise
             //float perlinNoise = Mathf.PerlinNoise((float)x * voxelSize / 16f * 1.5f, (float)z * voxelSize / 16f * 1.5f);
@@ -416,9 +494,19 @@ public class VoxelGenerator : MonoBehaviour
             //    cummulatedHeights.Add(scaledHeight);
 
             voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
+
+            if(y > highestlevel)
+            {
+                highestlevel = y;
+            }
+
+            //if(y > 50)
+            //{
+            //    Debug.Log(y);
+            //}
         }
 
-        //  Debug.Log("done filling data structure");
+          Debug.Log($"done filling data structure. highest level: {highestlevel}");
     }
 
     private void DisplayVoxels(int voxelwidth, int voxelheight)
@@ -448,9 +536,10 @@ public class VoxelGenerator : MonoBehaviour
             // Call the DrawCube method to draw a cube at the voxel's position
             if (voxelData[index].DistanceToSurface <= displayThreshold)
             {
-                DrawCube(voxelPosition, voxelSize, voxelcol);
-
+                // DrawCube(voxelPosition, voxelSize, voxelcol);
+                Gizmos.color = voxelcol;
             }
+                Gizmos.DrawWireCube(voxelPosition, new Vector3(voxelSize, voxelSize, voxelSize) );
         }
     }
 
@@ -506,7 +595,7 @@ public class VoxelGenerator : MonoBehaviour
         if (voxelIndex >= voxelData.Length)
         {
             Debug.LogError($"index: {voxelIndex} length: {voxelData.Length} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight}");
-            return 0;
+            return -1;
         }
         return voxelData[voxelIndex].DistanceToSurface;
     }
@@ -524,9 +613,9 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log($"resolution: {voxelSize + resolutionMultiplier} position: {chunkpos.x}_{chunkpos.y}");
         int voxelLength = xVoxels * yVoxels * zVoxels;
 
-
+        Debug.Log(resolutionMultiplier);
         MeshGenerator generator = GetComponent<MeshGenerator>();
-        generator.GenerateMesh(voxelLength, xVoxels + 0, yVoxels + 0, (voxelSize + resolutionMultiplier), new Vector2(maxChunkWidth, height), new Vector2Int(chunkpos.x, chunkpos.y));
+        generator.GenerateMesh(voxelLength, xVoxels, yVoxels, (voxelSize + resolutionMultiplier), new Vector2(maxChunkWidth, height), new Vector2Int(chunkpos.x, chunkpos.y));
     }
 
     private void DestroyMesh(Vector2Int tilepos)

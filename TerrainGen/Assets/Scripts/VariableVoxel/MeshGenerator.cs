@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 //using System.Drawing;
 using UnityEngine;
-
+using UnityEngine.UIElements;
 
 public class MeshGenerator : MonoBehaviour
 {
@@ -44,8 +44,8 @@ public class MeshGenerator : MonoBehaviour
     public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 worldSize, Vector2Int offset)
     {
         float width = worldSize.x;
-       // float height = worldSize.y;
-         //Debug.Log($" width: {width} voxelwidth: {voxelWidth}");
+         float height = worldSize.y;
+        //Debug.Log($" width: {width} voxelwidth: {voxelWidth}");
         for (int index = 0; index < voxelsLength; index++)
         {
 
@@ -62,15 +62,18 @@ public class MeshGenerator : MonoBehaviour
                 z * voxelSize
             );
 
-
+            if (voxelPosition.y < 63)
+            {
+                // Debug.Log($"offset {offset} position: {voxelPosition}");
+            }
 
 
             //use marchingcube algorithm to generate triangles and vertices
-            //if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
-            //{
+            if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
+            {
+                MarchCube(voxelPosition, voxelSize, (int)(width /* + 14*/));
 
-            //}
-            MarchCube(voxelPosition, voxelSize, (int)(width /* + 14*/));
+            }
 
         }
 
