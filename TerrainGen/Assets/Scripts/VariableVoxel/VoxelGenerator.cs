@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using TMPro;
 using UnityEditor.Rendering;
@@ -35,6 +36,7 @@ public class VoxelGenerator : MonoBehaviour
     [SerializeField] Color endColor = new Color(1, 0, 0, 0);     // Color for high DistanceToSurface values
     [SerializeField] bool debug;
     [SerializeField] bool DebugTiles;
+    [SerializeField] bool DebugBlocks;
     TerrainTile[,] tiles;
 
     public Transform player;
@@ -83,10 +85,10 @@ public class VoxelGenerator : MonoBehaviour
                 //iterating each chunk inside a tile
                 GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(xtile, ytile));
 
-              blocks =  GenerateBlocks(xtile, ytile);
+                blocks = GenerateBlocks(xtile, ytile);
                 foreach (var block in blocks)
                 {
-                    Debug.Log(block.Width);
+                    //Debug.Log(block.Width);
                 }
 
                 //generate new tile
@@ -141,31 +143,57 @@ public class VoxelGenerator : MonoBehaviour
                 Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
                 GenerateMesh(chunkPos, tileposOffset, chunkWidth);
 
-               // Debug.Log($"chunk: {x}:{z} Done!");
+                // Debug.Log($"chunk: {x}:{z} Done!");
             }
         }
     }
 
-    List<Block> GenerateBlocks(int tileX,int tileY)
+    List<Block> GenerateBlocks(int tileX, int tileY)
     {
+
+
         TerrainTile tile = tiles[tileX, tileY];
         List<Block> filledBlocks = new List<Block>();
+        int currentBlockWidth = 128;
 
-        float maxRadius = Mathf.Sqrt(2) * 2048 / 2.0f;
-        Debug.Log("radius " +maxRadius);
-        for (float radius = 0; radius <= maxRadius; radius += 128)
+        for (int radius = 128; radius < 2000; radius *= 2) // Generate 9 blocks with a width of 128 around the player
         {
-            int blockWidth = Mathf.Clamp((int)radius, 128, 1024);
+            for (int angle = 0; angle < 360; angle++) // Iterate through all angles (0-359 degrees)
+            {
+                double radianAngle = angle * (Math.PI / 180); // Convert angle to radians
+                                                              // float radius = radius * currentBlockWidth; // Distance from the player, increasing for each ring
+                float newX = player.transform.position.x + radius * Mathf.Cos((float)radianAngle);
+                float newY = player.transform.position.z + radius * Mathf.Sin((float)radianAngle);
 
-            //Block block = new Block
-            //{
-            //    Width = blockWidth
-            //    //Chunks = CalculateChunks(tile, blockWidth)
-            //};
-            Block block = new Block(blockWidth);
+                // Round to the nearest multiple of the current block width
+                newX = Mathf.Round(newX / currentBlockWidth) * currentBlockWidth;
+                newY = Mathf.Round(newY / currentBlockWidth) * currentBlockWidth;
 
-            filledBlocks.Add(block);
+
+                if (newX > 0 && newY > 0)
+                {
+                    Block block = new Block(currentBlockWidth);
+                    block.X = (int)newX;
+                    block.Y = (int)newY;
+
+                    //check if block exists already
+                    if (!filledBlocks.Any(x => x.X == block.X && x.Y == block.Y && x.Width == block.Width))
+                    {
+                        filledBlocks.Add(block);
+                    Debug.Log($"X: {newX} Y: {newY} radius: {radius}");
+
+                    }
+
+                }
+            }
+            currentBlockWidth = radius;
         }
+        var lastclock = filledBlocks[ filledBlocks.Count - 1];
+        Debug.Log($" length {filledBlocks.Count} last index {lastclock.X}: {lastclock.Y}");
+
+        
+
+
 
         return filledBlocks;
     }
@@ -185,18 +213,59 @@ public class VoxelGenerator : MonoBehaviour
 
             }
 
-            if (!DebugTiles)
+            if (DebugTiles)
             {
-                return;
+
+
+                for (int x = 0; x < tiles.GetLength(0); x++)
+                {
+                    for (int y = 0; y < tiles.GetLength(0); y++)
+                    {
+                        Color col = new Color(0, 0, 0);
+
+                        switch (tiles[x, y].Width)
+                        {
+                            case 128:
+                                col = Color.cyan;
+                                break;
+                            case 256:
+                                col = Color.green;
+                                break;
+                            case 512:
+                                col = Color.blue;
+                                break;
+                            case 1024:
+                                col = Color.yellow;
+                                break;
+                            case 2048:
+                                col = Color.red;
+                                break;
+                            default:
+                                break;
+                        }
+                        Gizmos.color = col;
+                        Vector3 cubepos = new Vector3(x * 2048.2f, 1024, y * 2048.2f) + new Vector3(1024, 0, 1024);
+                        Gizmos.DrawWireCube(cubepos, new Vector3(2048, 2000, 2048));
+
+                        // if (tiles[x, y].Width == 0)
+                        //  Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
+                    }
+                }
+
             }
 
-            for (int x = 0; x < tiles.GetLength(0); x++)
+            if (DebugBlocks)
             {
-                for (int y = 0; y < tiles.GetLength(0); y++)
+                ////draw blocks
+                for (int i = 0; i < blocks.Count; i++)
                 {
+                    int x = blocks[i].X;
+                    int y = blocks[i].Y;
+                    int width = blocks[i].Width;
+                    //  Debug.Log($"x {x} y {y} width {width}");
                     Color col = new Color(0, 0, 0);
 
-                    switch (tiles[x, y].Width)
+                    switch (blocks[i].Width)
                     {
                         case 128:
                             col = Color.cyan;
@@ -217,50 +286,14 @@ public class VoxelGenerator : MonoBehaviour
                             break;
                     }
                     Gizmos.color = col;
-                    Vector3 cubepos = new Vector3(x * 2048.2f, 1024, y * 2048.2f) + new Vector3(1024, 0, 1024);
-                    Gizmos.DrawWireCube(cubepos, new Vector3(2048, 2000, 2048));
+                    Vector3 cubepos = new Vector3(x, 0, y);
+                    Gizmos.DrawWireCube(cubepos, new Vector3(width, width, width));
 
                     // if (tiles[x, y].Width == 0)
                     //  Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
+
                 }
             }
-
-
-            ////draw blocks
-            //for (int x = 0; x < blocks.GetLength(0); x++)
-            //{
-            //    for (int y = 0; y < blocks.GetLength(0); y++)
-            //    {
-            //        Color col = new Color(0, 0, 0);
-
-            //        switch (tiles[x, y].Width)
-            //        {
-            //            case 128:
-            //                col = Color.cyan;
-            //                break;
-            //            case 256:
-            //                col = Color.green;
-            //                break;
-            //            case 512:
-            //                col = Color.blue;
-            //                break;
-            //            case 1024:
-            //                col = Color.yellow;
-            //                break;
-            //            case 2048:
-            //                col = Color.red;
-            //                break;
-            //            default:
-            //                break;
-            //        }
-            //        Gizmos.color = col;
-            //        Vector3 cubepos = new Vector3(x * 2048.2f, 1024, y * 2048.2f) + new Vector3(1024, 0, 1024);
-            //        Gizmos.DrawWireCube(cubepos, new Vector3(2048, 2000, 2048));
-
-            //        // if (tiles[x, y].Width == 0)
-            //        //  Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
-            //    }
-            //}
 
 
         }
@@ -408,17 +441,17 @@ public class VoxelGenerator : MonoBehaviour
 
     void InitializeVoxelSize(int maxWidth)
     {
-       
+
         // Calculate the number of voxels in each dimension
         xVoxels = maxWidth / voxelSize;
-        yVoxels = Mathf.CeilToInt( (float)height / voxelSize);
+        yVoxels = Mathf.CeilToInt((float)height / voxelSize);
         zVoxels = xVoxels;
-        
+
         // Initialize the voxelData array based on the calculated dimensions
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         voxelData = new VoxelData[totalVoxels];
 
-         Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels+1} yvoxels {yVoxels+1} zvoxels {zVoxels+1} maxwidth: {maxWidth}");
+        Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels + 1} yvoxels {yVoxels + 1} zvoxels {zVoxels + 1} maxwidth: {maxWidth}");
     }
 
     void InitializeHeightmap(int x, int y)
@@ -495,7 +528,7 @@ public class VoxelGenerator : MonoBehaviour
 
             voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
 
-            if(y > highestlevel)
+            if (y > highestlevel)
             {
                 highestlevel = y;
             }
@@ -506,7 +539,7 @@ public class VoxelGenerator : MonoBehaviour
             //}
         }
 
-          Debug.Log($"done filling data structure. highest level: {highestlevel}");
+        Debug.Log($"done filling data structure. highest level: {highestlevel}");
     }
 
     private void DisplayVoxels(int voxelwidth, int voxelheight)
@@ -539,7 +572,7 @@ public class VoxelGenerator : MonoBehaviour
                 // DrawCube(voxelPosition, voxelSize, voxelcol);
                 Gizmos.color = voxelcol;
             }
-                Gizmos.DrawWireCube(voxelPosition, new Vector3(voxelSize, voxelSize, voxelSize) );
+            Gizmos.DrawWireCube(voxelPosition, new Vector3(voxelSize, voxelSize, voxelSize));
         }
     }
 
@@ -585,7 +618,7 @@ public class VoxelGenerator : MonoBehaviour
         int voxelsWidth = xVoxels + 1;
         int voxelsHeight = yVoxels + 1;
 
-        
+
         //// Clamp to the bounds of the voxel grid
         //x = Mathf.Clamp(x, 0, xVoxels - 1);
         //y = Mathf.Clamp(y, 0, yVoxels - 1);
