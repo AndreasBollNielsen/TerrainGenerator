@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 1013.9474, g: 1213.8917, b: 1592.8977, a: 1}
+  m_IndirectSpecularColor: {r: 1014.5216, g: 1214.7804, b: 1594.9211, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -689,6 +689,8 @@ MonoBehaviour:
   maxZTiles: 1
   voxelSize: 32
   displayThreshold: -10
+  offset: {x: 0, y: 0, z: 0}
+  scale: {x: 0, y: 0, z: 0}
   startColor: {r: 0.066957, g: 1, b: 0, a: 0.7882353}
   endColor: {r: 1, g: 0, b: 0, a: 0}
   debug: 0
@@ -779,7 +781,7 @@ PrefabInstance:
     - target: {fileID: 9039066474616613192, guid: fd4cc2ed77fcc854e82a2fc3e125577d,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: 32
+      value: 1536
       objectReference: {fileID: 0}
     - target: {fileID: 9039066474616613192, guid: fd4cc2ed77fcc854e82a2fc3e125577d,
         type: 3}
@@ -789,7 +791,7 @@ PrefabInstance:
     - target: {fileID: 9039066474616613192, guid: fd4cc2ed77fcc854e82a2fc3e125577d,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: 32
+      value: 1536
       objectReference: {fileID: 0}
     - target: {fileID: 9039066474616613192, guid: fd4cc2ed77fcc854e82a2fc3e125577d,
         type: 3}

@@ -9,6 +9,7 @@ public class Block
     List<Chunk_v> chunks;
     public int X;
     public int Y;
+   
     Dictionary<int, int> lodSelector;
 
     public Block(int _width)
@@ -23,5 +24,10 @@ public class Block
             {1024,2 },
             {2048,1 }
         };
+    }
+
+   public Vector3 GetPosition()
+    {
+        return new Vector3(X, 0, Y);
     }
 }
