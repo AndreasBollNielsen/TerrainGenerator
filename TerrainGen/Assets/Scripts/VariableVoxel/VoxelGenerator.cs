@@ -5,6 +5,7 @@ using System.Linq;
 using TMPro;
 
 using UnityEngine;
+using static UnityEditor.PlayerSettings;
 using static UnityEngine.EventSystems.EventTrigger;
 
 
@@ -86,7 +87,7 @@ public class VoxelGenerator : MonoBehaviour
                 GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(xtile, ytile));
 
                 blocks = GenerateBlocks(xtile, ytile);
-               
+
 
                 //generate new tile
                 TerrainTile tile = tiles[xtile, ytile];
@@ -151,55 +152,20 @@ public class VoxelGenerator : MonoBehaviour
 
         TerrainTile tile = tiles[tileX, tileY];
         List<Block> filledBlocks = new List<Block>();
-        int currentBlockWidth = 128;
+        int currentBlockWidth = tile.Width;
+        Vector2 playerpos = new Vector2(player.transform.position.x, player.transform.position.z);
+        Vector2 rootPos = new Vector2(2048 / 2, 2048 / 2);
 
-        filledBlocks = DividePosition( 2048,4, player.transform.position);
+        float dist = Vector2.Distance(playerpos, rootPos);
 
-        //for (int radius = 0; radius < 512; radius += (currentBlockWidth/2)) // Generate 9 blocks with a width of 128 around the player
-        //{
-        //    Debug.Log("radius: " + radius);
+        //divide if player is within tile
+        if (dist < 2048 / 2)
+        {
+            filledBlocks = DividePosition(new Vector2(2048 / 2, 2048 / 2), 2048, 2048, 2, playerpos, 1);
 
-        //    for (int angle = 0; angle < 360; angle += 45) // Iterate through all angles (0-359 degrees)
-        //    {
-        //        double radianAngle = angle * (Math.PI / 180); // Convert angle to radians
-
-        //        int pX = Mathf.FloorToInt(player.transform.position.x / currentBlockWidth) * currentBlockWidth;
-        //        int pY = Mathf.FloorToInt(player.transform.position.z / currentBlockWidth) * currentBlockWidth;
+        }
 
 
-        //        // float radius = radius * currentBlockWidth; // Distance from the player, increasing for each ring
-        //        float newX = player.transform.position.x + (radius + 0f) * Mathf.Cos((float)radianAngle);
-        //        float newY = player.transform.position.z + (radius + 0f) * Mathf.Sin((float)radianAngle);
-
-        //        // Round to the nearest multiple of the current block width
-        //       // newX = Mathf.Floor(newX / currentBlockWidth) * currentBlockWidth;
-        //       // newY = Mathf.Floor(newY / currentBlockWidth) * currentBlockWidth;
-
-
-
-
-        //        if (newX >= 0 && newY >= 0)
-        //        {
-        //             Debug.Log($"X: {newX} Y: {newY} width: {currentBlockWidth}");
-
-        //            Block block = new Block(currentBlockWidth);
-        //            block.X = (int)newX - (currentBlockWidth / 2);
-        //            block.Y = (int)newY - (currentBlockWidth / 2);
-        //            block.radius = radius;
-
-        //            //check if block exists already
-        //            if (!filledBlocks.Any(x => x.X == block.X && x.Y == block.Y && x.Width == block.Width) && radius < 256)
-        //            {
-        //                filledBlocks.Add(block);
-
-        //            }
-        //        }
-        //    }
-        //    currentBlockWidth *= 2;
-
-        //}
-        //var lastclock = filledBlocks[ filledBlocks.Count - 1];
-        //Debug.Log($" length {filledBlocks.Count} last index {lastclock.X}: {lastclock.Y}");
 
 
 
@@ -208,92 +174,103 @@ public class VoxelGenerator : MonoBehaviour
         return filledBlocks;
     }
 
-    List<Block> DividePosition(  float width, int divisions, Vector3 playerpos)
+    List<Block> DividePosition(Vector2 center, float width, float height, int divisions, Vector2 playerpos, int level)
     {
         List<Block> tempblocks = new List<Block>();
 
         // Calculate half of the width and height
         float halfWidth = width / 2.0f;
-       // float halfHeight = width / 2.0f; // This might need to be adjusted based on your requirements
+        float halfHeight = height / 2.0f; // This might need to be adjusted based on your requirements
 
-        float centerX = width/2;
-        float centerY = width/2;
+        float centerX = center.x;
+        float centerY = center.y;
 
-        float[] angles = new float[4]{45,90,135,180 };
 
-        // Create four points in each quadrant
-        //Vector3 topLeft = new Vector3(centerX - (halfWidth/2), 0, centerY + (halfWidth / 2));
-        //Vector3 topRight = new Vector3(centerX + (halfWidth / 2), 0, centerY + (halfWidth / 2));
-        //Vector3 bottomLeft = new Vector3(centerX - (halfWidth / 2), 0, centerY - (halfWidth / 2));
-        //Vector3 bottomRight = new Vector3(centerX + (halfWidth / 2), 0, centerY - (halfWidth / 2));
 
-        //Debug.Log($"TopLeft: {topLeft},\n TopRight: {topRight},\n BottomLeft: {bottomLeft},\n BottomRight: {bottomRight} \n width: {width}");
+        int nextLevel = level + 1;
 
-        //// Add blocks for each position
-        //tempblocks.Add(CreateBlock(topLeft, halfWidth));
-        //tempblocks.Add(CreateBlock(topRight, halfWidth));
-        //tempblocks.Add(CreateBlock(bottomLeft, halfWidth));
-        //tempblocks.Add(CreateBlock(bottomRight, halfWidth));
-       // int divisions = 12;
-        // Create points around the player position
-        for (int i = 0; i < divisions; i++)
+        bool ignoreplayer = false;
+
+        // Debug.Log($"level: {level} width: {width} center: {centerX}:{centerY}");
+
+        //ignore distance calculation & fill remaining blocks
+        if(width == 128)
         {
-            float angle = i * (360f / divisions); // Angle in degrees
-            double radianAngle = angle * Mathf.Deg2Rad; // Convert angle to radians
-
-            float newX = centerX + halfWidth * Mathf.Cos((float)radianAngle);
-            float newY = centerY + halfWidth * Mathf.Sin((float)radianAngle);
-            Debug.Log($"angle: {angle}");
-            float offset = halfWidth / 2;
-            // offset = 0;
-            //  Vector3 position = new Vector3(Mathf.Abs( newX - offset), 0, Mathf.Abs( newY - offset));
-            Vector3 position = new Vector3(newX, 0, newY);
-           // Vector3 position = new Vector3( newX - offset, 0, newY - offset);
-            
-            Debug.Log($"Position: {position}");
-
-            // Add a block for each position
-            tempblocks.Add(CreateBlock(position, width));
+            ignoreplayer = true;
         }
 
+        Vector2[] positions = new Vector2[]
+{
+    new Vector2(centerX -halfWidth   / 2,  centerY + halfHeight/ 2),   // Top Left
+    new Vector2(centerX + halfWidth / 2,  centerY + halfHeight / 2),    // Top Right
+    new Vector2(centerX -halfWidth / 2, centerY -halfHeight  / 2),  // Bottom Left
+    new Vector2(centerX + halfWidth / 2, centerY -halfHeight  / 2)    // Bottom Right
+};
 
-        float dist = float.MaxValue;
-        int index = -1;
-
-        // Find the index of the nearest point
-        for (int i = 0; i < tempblocks.Count; i++)
+        int index = 0;
+        foreach (var position in positions)
         {
-            float curDist = Vector3.Distance(tempblocks[i].GetPosition(), new Vector3(playerpos.x, 0, playerpos.z));
-            if (curDist < dist)
+            Vector3 adjustedPosition = new Vector3(position.x, 0, position.y);
+
+            if (level == 2 && center.x == 512 && center.y == 1536)
             {
-                dist = curDist;
-                index = i;
+                //  Debug.Log($"position: {positions[index]} center: {center} halfwidth: {halfWidth} halfHeight: {halfHeight}");
+
             }
-           // Debug.Log(tempblocks[i].GetPosition());
+            index++;
+
+            float dist = Vector2.Distance(playerpos, new Vector2(adjustedPosition.x,adjustedPosition.z));
+            if(level == 5)
+            {
+            Debug.Log($"Dist: {dist} width: {width} level: {level}");
+
+            }
+            //divide if player is within block
+            if (dist < width || ignoreplayer)
+            {
+
+                if (width >= 256)
+                {
+
+                    Vector2 pos = new Vector2(adjustedPosition.x, adjustedPosition.z);
+                    var blocks = DividePosition(pos, halfWidth, halfHeight, divisions, playerpos, nextLevel);
+                    tempblocks.AddRange(blocks);
+
+                }
+                else
+                {
+                    // Add a block for each adjusted position
+                    tempblocks.Add(CreateBlock(adjustedPosition, width / divisions));
+                    Debug.Log("stopped at " + width);
+                }
+            }
+            else
+            {
+                // Add a block for each adjusted position
+                tempblocks.Add(CreateBlock(adjustedPosition, width / divisions));
+
+            }
+
+
         }
 
-        Debug.Log(index);
 
-        // If a nearest point is found and the width is greater than 64, recursively divide
-        if (index >= 0 )
-        {
-            Vector3 pos = tempblocks[index].GetPosition();
-           // tempblocks.RemoveAt(index);
-           //tempblocks.AddRange(DividePosition(pos.x, pos.z, halfWidth,divisions, playerpos));
-        }
 
+
+
+
+
+
+
+        // Debug.Log(tempblocks.Count);
         return tempblocks;
 
         // Helper method to create a block based on a position and width
-         Block CreateBlock(Vector3 position, float width)
+        Block CreateBlock(Vector3 position, float width)
         {
-            int scaledwidth = Mathf.RoundToInt( width / 4);
-
-            Block block = new Block((int)width/2);
-            block.X = Mathf.Abs(  Mathf.RoundToInt(position.x) - scaledwidth);
-            block.Y = Mathf.Abs(Mathf.RoundToInt(position.z) - scaledwidth);
-
-            Debug.Log($"Position: {block.GetPosition()}");
+            Block block = new Block((int)width);
+            block.X = (int)position.x /*- ((int)width / 2)*/;
+            block.Y = (int)position.z /*- ((int)width / 2)*/;
             return block;
         }
     }
@@ -362,8 +339,8 @@ public class VoxelGenerator : MonoBehaviour
                     int x = blocks[i].X;
                     int y = blocks[i].Y;
                     int width = blocks[i].Width;
-                   
-                    //  Debug.Log($"x {x} y {y} width {width}");
+
+                    // Debug.Log($"x {x} y {y} width {width}");
                     Color col = new Color(0, 0, 0);
 
                     int pX = Mathf.FloorToInt(player.transform.position.x / width) * width;
@@ -371,6 +348,9 @@ public class VoxelGenerator : MonoBehaviour
 
                     switch (blocks[i].Width)
                     {
+                        case 64:
+                            col = Color.white;
+                            break;
                         case 128:
                             col = Color.cyan;
                             break;
@@ -390,13 +370,18 @@ public class VoxelGenerator : MonoBehaviour
                             break;
                     }
                     Gizmos.color = col;
-                    Vector3 cubepos = new Vector3(x, 0, y) + offset;
+                    if(blocks[i].Width < 64)
+                    {
+                        Gizmos.color = Color.white;
+                    }
+
+                    Vector3 cubepos = new Vector3(x, 0, y);
                     Vector3 cubescale = new Vector3(width, width, width) - scale;
                     Gizmos.DrawWireCube(cubepos, cubescale);
 
-                   // Gizmos.DrawWireSphere(player.transform.position, radius);
+                    // Gizmos.DrawWireSphere(player.transform.position, radius);
 
-                  //  Gizmos.DrawCube(new Vector3(pX, 0, pY), new Vector3(32, 32, 32));
+                    //  Gizmos.DrawCube(new Vector3(pX, 0, pY), new Vector3(32, 32, 32));
                     // if (tiles[x, y].Width == 0)
                     //  Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
 
@@ -559,7 +544,7 @@ public class VoxelGenerator : MonoBehaviour
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         voxelData = new VoxelData[totalVoxels];
 
-        Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels + 1} yvoxels {yVoxels + 1} zvoxels {zVoxels + 1} maxwidth: {maxWidth}");
+        // Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels + 1} yvoxels {yVoxels + 1} zvoxels {zVoxels + 1} maxwidth: {maxWidth}");
     }
 
     void InitializeHeightmap(int x, int y)
@@ -647,7 +632,7 @@ public class VoxelGenerator : MonoBehaviour
             //}
         }
 
-        Debug.Log($"done filling data structure. highest level: {highestlevel}");
+        // Debug.Log($"done filling data structure. highest level: {highestlevel}");
     }
 
     private void DisplayVoxels(int voxelwidth, int voxelheight)
@@ -754,7 +739,7 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log($"resolution: {voxelSize + resolutionMultiplier} position: {chunkpos.x}_{chunkpos.y}");
         int voxelLength = xVoxels * yVoxels * zVoxels;
 
-      //  Debug.Log(resolutionMultiplier);
+        //  Debug.Log(resolutionMultiplier);
         MeshGenerator generator = GetComponent<MeshGenerator>();
         generator.GenerateMesh(voxelLength, xVoxels, yVoxels, (voxelSize + resolutionMultiplier), new Vector2(maxChunkWidth, height), new Vector2Int(chunkpos.x, chunkpos.y));
     }

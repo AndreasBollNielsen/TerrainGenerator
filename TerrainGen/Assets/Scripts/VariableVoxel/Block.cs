@@ -26,8 +26,8 @@ public class Block
         };
     }
 
-   public Vector3 GetPosition()
+   public Vector2 GetPosition()
     {
-        return new Vector3(X, 0, Y);
+        return new Vector2(X, Y);
     }
 }
