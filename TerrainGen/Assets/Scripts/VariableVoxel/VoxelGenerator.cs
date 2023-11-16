@@ -28,7 +28,7 @@ public class VoxelGenerator : MonoBehaviour
     Color[] heightMap;
     // Color[] WaterMap;
     int heightmapWidth;
-    List<Block> blocks;
+    //  List<Block> blocks;
     //int maxChunkWidth;
     public Vector3 offset;
     public Vector3 scale;
@@ -83,10 +83,12 @@ public class VoxelGenerator : MonoBehaviour
                     currentChunkSizeZ = maxZchunks;
                 }
 
-                //iterating each chunk inside a tile
-                GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(xtile, ytile));
+                //generating blocks
+                var blocks = GenerateBlocks(xtile, ytile);
+                Debug.Log(blocks.Count);
 
-                blocks = GenerateBlocks(xtile, ytile);
+                //iterating each chunk inside a tile
+                GenerateChunks(blocks, currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(xtile, ytile));
 
 
                 //generate new tile
@@ -99,7 +101,7 @@ public class VoxelGenerator : MonoBehaviour
                 terrainTile.transform.position = tileposition;
                 terrainTile.name = $"Tile_{xtile}_{ytile}";
                 terrainTile.transform.SetParent(gameObject.transform, false);
-
+                tile.AddBlocks(blocks);
                 tiles[xtile, ytile] = tile;
                 tiles[xtile, ytile].LODChanged += VoxelGenerator_LODChanged;
             }
@@ -117,57 +119,99 @@ public class VoxelGenerator : MonoBehaviour
 
     }
 
-    void GenerateChunks(int numChunkX, int numChunkZ, int chunkWidth, Vector2Int tilepos)
+    void GenerateChunks(List<Block> blocks, int numChunkX, int numChunkZ, int chunkWidth, Vector2Int tilepos)
     {
-
-
-        for (int x = 0; x < numChunkX; x++)
+       
+        foreach (Block block in blocks)
         {
-            for (int z = 0; z < numChunkZ; z++)
+            if(block.Width > 128)
             {
-                //if(x < 3 &&  z < 3)
-                //{
-                //    continue;
-                //}
-
-                //initialize voxelsize
-                InitializeVoxelSize(chunkWidth);
-
-                // Generate the voxel structure
-                GenerateVoxelStructure(chunkWidth * x, chunkWidth * z);
-
-                // generate mesh
-                Vector2Int chunkPos = new Vector2Int((chunkWidth/*+14*/) * x, (chunkWidth/*+14*/) * z);
-                Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
-                GenerateMesh(chunkPos, tileposOffset, chunkWidth);
-
-                // Debug.Log($"chunk: {x}:{z} Done!");
+                continue;
             }
+            //debugging
+            //Debug.Log($"blockpos: {block.X}:{block.Y} width: {block.Width}");
+            //GameObject chunk = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            //chunk.transform.localScale = new Vector3(block.Width, block.Width, block.Width);
+            //chunk.transform.localPosition = new Vector3(block.X,1500,block.Y);
+            //chunk.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            //chunk.GetComponent<Renderer>().material = GetComponent<MeshGenerator>().material;
+            chunkWidth = block.Width;
+            int x = block.X ;
+            int y = block.Y ;
+
+           // Debug.Log($"x {x} y {y} width: {chunkWidth}");
+
+            //initialize voxelsize
+            InitializeVoxelSize(chunkWidth);
+
+            // Generate the voxel structure
+            GenerateVoxelStructure( x - (chunkWidth / 2), y - (chunkWidth / 2));
+
+
+            // generate mesh
+            Vector2Int chunkPos = new Vector2Int(x, y);
+            Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+            GenerateMesh(chunkPos, tileposOffset, chunkWidth);
+
+            
         }
+
+        //for (int x = 0; x < numChunkX; x++)
+        //{
+        //    for (int z = 0; z < numChunkZ; z++)
+        //    {
+
+
+        //        //initialize voxelsize
+        //        InitializeVoxelSize(chunkWidth);
+
+        //        // Generate the voxel structure
+        //        GenerateVoxelStructure(chunkWidth * x, chunkWidth * z);
+
+        //        // generate mesh
+        //        Vector2Int chunkPos = new Vector2Int((chunkWidth/*+14*/) * x, (chunkWidth/*+14*/) * z);
+        //        Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+        //        GenerateMesh(chunkPos, tileposOffset, chunkWidth);
+
+        //        // Debug.Log($"chunk: {x}:{z} Done!");
+        //    }
+        //}
     }
 
     List<Block> GenerateBlocks(int tileX, int tileY)
     {
 
-
-        TerrainTile tile = tiles[tileX, tileY];
+        int tileSize = 2048;
+        //TerrainTile tile = tiles[tileX, tileY];
         List<Block> filledBlocks = new List<Block>();
-        int currentBlockWidth = tile.Width;
-        Vector2 playerpos = new Vector2(player.transform.position.x, player.transform.position.z);
-        Vector2 rootPos = new Vector2(2048 / 2, 2048 / 2);
 
-        float dist = Vector2.Distance(playerpos, rootPos);
+        Vector2 playerpos = new Vector2(player.transform.position.x, player.transform.position.z);
+
+        Vector2 tileCenter = new Vector2((tileX + 0.5f) * tileSize, (tileY + 0.5f) * tileSize);
+        float dist = Vector2.Distance(playerpos, tileCenter);
+        //if (tileX == 3 && tileY == 0)
+        //{
+        //    Debug.Log($"Dist: {dist} tile {tileX}:{tileY} rootpos: {tileCenter} width {width}");
+
+        //}
 
         //divide if player is within tile
-        if (dist < 2048 / 2)
+        if (dist < 2048 || tileX < 3 && tileY < 3)
         {
-            filledBlocks = DividePosition(new Vector2(2048 / 2, 2048 / 2), 2048, 2048, 2, playerpos, 1);
+            filledBlocks = DividePosition(tileCenter, 2048, 2048, 2, playerpos, 1);
 
+        }
+        else
+        {
+            Block block = new Block(2048);
+            block.X = Mathf.RoundToInt( tileCenter.x);
+            block.Y = Mathf.RoundToInt( tileCenter.y);
+            filledBlocks.Add(block);
         }
 
 
 
-
+        filledBlocks = filledBlocks.OrderBy(block => block.Width).ToList();
 
 
 
@@ -194,7 +238,7 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log($"level: {level} width: {width} center: {centerX}:{centerY}");
 
         //ignore distance calculation & fill remaining blocks
-        if(width == 128)
+        if (width == 128)
         {
             ignoreplayer = true;
         }
@@ -219,17 +263,17 @@ public class VoxelGenerator : MonoBehaviour
             }
             index++;
 
-            float dist = Vector2.Distance(playerpos, new Vector2(adjustedPosition.x,adjustedPosition.z));
-            if(level == 5)
+            float dist = Vector2.Distance(playerpos, new Vector2(adjustedPosition.x, adjustedPosition.z));
+            if (level == 5)
             {
-            Debug.Log($"Dist: {dist} width: {width} level: {level}");
+                //  Debug.Log($"Dist: {dist} width: {width} level: {level}");
 
             }
             //divide if player is within block
             if (dist < width || ignoreplayer)
             {
 
-                if (width >= 256)
+                if (width >= 512)
                 {
 
                     Vector2 pos = new Vector2(adjustedPosition.x, adjustedPosition.z);
@@ -241,7 +285,7 @@ public class VoxelGenerator : MonoBehaviour
                 {
                     // Add a block for each adjusted position
                     tempblocks.Add(CreateBlock(adjustedPosition, width / divisions));
-                    Debug.Log("stopped at " + width);
+                    // Debug.Log("stopped at " + width);
                 }
             }
             else
@@ -296,7 +340,7 @@ public class VoxelGenerator : MonoBehaviour
 
                 for (int x = 0; x < tiles.GetLength(0); x++)
                 {
-                    for (int y = 0; y < tiles.GetLength(0); y++)
+                    for (int y = 0; y < tiles.GetLength(1); y++)
                     {
                         Color col = new Color(0, 0, 0);
 
@@ -333,61 +377,63 @@ public class VoxelGenerator : MonoBehaviour
 
             if (DebugBlocks)
             {
-                ////draw blocks
-                for (int i = 0; i < blocks.Count; i++)
+
+                for (int x = 0; x < tiles.GetLength(0); x++)
                 {
-                    int x = blocks[i].X;
-                    int y = blocks[i].Y;
-                    int width = blocks[i].Width;
-
-                    // Debug.Log($"x {x} y {y} width {width}");
-                    Color col = new Color(0, 0, 0);
-
-                    int pX = Mathf.FloorToInt(player.transform.position.x / width) * width;
-                    int pY = Mathf.FloorToInt(player.transform.position.z / width) * width;
-
-                    switch (blocks[i].Width)
+                    for (int y = 0; y < tiles.GetLength(1); y++)
                     {
-                        case 64:
-                            col = Color.white;
-                            break;
-                        case 128:
-                            col = Color.cyan;
-                            break;
-                        case 256:
-                            col = Color.green;
-                            break;
-                        case 512:
-                            col = Color.blue;
-                            break;
-                        case 1024:
-                            col = Color.yellow;
-                            break;
-                        case 2048:
-                            col = Color.red;
-                            break;
-                        default:
-                            break;
+                        var blocks = tiles[x, y].GetBlocks();
+                        // Debug.Log(blocks.Count);
+                        ////draw blocks
+                        for (int i = 0; i < blocks.Count; i++)
+                        {
+                            int xblock = blocks[i].X;
+                            int yblock = blocks[i].Y;
+                            int width = blocks[i].Width;
+                            // Debug.Log($"xblock {xblock} yblock {yblock} width {width}");
+                            Color col = new Color(0, 0, 0);
+
+                            int pX = Mathf.FloorToInt(player.transform.position.x / width) * width;
+                            int pY = Mathf.FloorToInt(player.transform.position.z / width) * width;
+
+                            switch (blocks[i].Width)
+                            {
+                                case 64:
+                                    col = Color.white;
+                                    break;
+                                case 128:
+                                    col = Color.cyan;
+                                    break;
+                                case 256:
+                                    col = Color.green;
+                                    break;
+                                case 512:
+                                    col = Color.blue;
+                                    break;
+                                case 1024:
+                                    col = Color.yellow;
+                                    break;
+                                case 2048:
+                                    col = Color.red;
+                                    break;
+                                default:
+                                    break;
+                            }
+                            Gizmos.color = col;
+
+                            if (blocks[i].Width < 64)
+                            {
+                                Gizmos.color = Color.white;
+                            }
+
+                            Vector3 cubepos = new Vector3(xblock, 0, yblock);
+                            Vector3 cubescale = new Vector3(width, width, width) - scale;
+                            Gizmos.DrawWireCube(cubepos, cubescale);
+                        }
+
                     }
-                    Gizmos.color = col;
-                    if(blocks[i].Width < 64)
-                    {
-                        Gizmos.color = Color.white;
-                    }
-
-                    Vector3 cubepos = new Vector3(x, 0, y);
-                    Vector3 cubescale = new Vector3(width, width, width) - scale;
-                    Gizmos.DrawWireCube(cubepos, cubescale);
-
-                    // Gizmos.DrawWireSphere(player.transform.position, radius);
-
-                    //  Gizmos.DrawCube(new Vector3(pX, 0, pY), new Vector3(32, 32, 32));
-                    // if (tiles[x, y].Width == 0)
-                    //  Debug.Log($"pos: {x}:{y} value: {tiles[x, y].Width}");
-
                 }
             }
-
 
         }
 #endif
@@ -468,7 +514,7 @@ public class VoxelGenerator : MonoBehaviour
         //  Debug.Log($"chunkWidth: {maxChunkWidth} currentX {currentChunkSizeX}");
 
         InitializeHeightmap(tilepos.x, tilepos.y);
-        GenerateChunks(currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(tilepos.x, tilepos.y));
+        GenerateChunks(tiles[tilepos.x, tilepos.y].GetBlocks(), currentChunkSizeX, currentChunkSizeZ, maxChunkWidth, new Vector2Int(tilepos.x, tilepos.y));
 
         ////copy data to tile
         tiles[tilepos.x, tilepos.y].AddChunks(GetComponent<MeshGenerator>().CopyChunks());
@@ -606,7 +652,8 @@ public class VoxelGenerator : MonoBehaviour
             if (index > heightMap.Length)
             {
 
-                Debug.Log($"x {x} y {y} z {z}");
+                Debug.LogError($"x {x} y {y} z {z}");
+                Debug.Log($"offset: {offsetX}:{offsetZ}");
                 return;
             }
 
@@ -730,13 +777,13 @@ public class VoxelGenerator : MonoBehaviour
     {
 
 
-        Vector2 compositedChunk = new Vector2(chunkpos.x, chunkpos.y) + tilepos;
+       // Vector2 compositedChunk = new Vector2(chunkpos.x, chunkpos.y) + tilepos;
 
-        float dist = Vector2.Distance(compositedChunk, player.position);
-        int resolutionMultiplier = Mathf.FloorToInt(dist / 2048);
+       // float dist = Vector2.Distance(compositedChunk, player.position);
+        int resolutionMultiplier = Mathf.FloorToInt(2 * Mathf.Log(maxChunkWidth / 64f, 2));
+       // int multiplier = Mathf.FloorToInt(2 * Mathf.Log(maxChunkWidth / 64f, 2));
 
-
-        // Debug.Log($"resolution: {voxelSize + resolutionMultiplier} position: {chunkpos.x}_{chunkpos.y}");
+       // Debug.Log($"resolution: {voxelSize + multiplier} position: {chunkpos.x}_{chunkpos.y}");
         int voxelLength = xVoxels * yVoxels * zVoxels;
 
         //  Debug.Log(resolutionMultiplier);

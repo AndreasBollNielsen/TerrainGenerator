@@ -72,6 +72,17 @@ public class TerrainTile
 
     }
 
+    public void AddBlocks(List<Block> _blocks)
+    {
+        blocks.Clear();
+        blocks.AddRange(_blocks);
+    }
+
+   public List<Block> GetBlocks()
+    {
+        return blocks;
+    }
+
     public List<Chunk_v> RemoveChunks()
     {
         return meshChunks;

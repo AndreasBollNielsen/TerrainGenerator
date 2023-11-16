@@ -13,7 +13,7 @@ public class MeshGenerator : MonoBehaviour
     VoxelGenerator VoxelGenerator;
 
 
-    [SerializeField] Material material;
+    public Material material;
     List<Chunk_v> chunks = new List<Chunk_v>();
     // Start is called before the first frame update
     private void Awake()

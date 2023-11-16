@@ -687,7 +687,7 @@ MonoBehaviour:
   maxZchunks: 16
   maxXTiles: 1
   maxZTiles: 1
-  voxelSize: 32
+  voxelSize: 8
   displayThreshold: -10
   offset: {x: 0, y: 0, z: 0}
   scale: {x: 0, y: 0, z: 0}
