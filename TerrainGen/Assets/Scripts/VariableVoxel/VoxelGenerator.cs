@@ -122,67 +122,71 @@ public class VoxelGenerator : MonoBehaviour
 
     void GenerateChunks(List<Block> blocks, int numChunkX, int numChunkZ, int chunkWidth, Vector2Int tilepos)
     {
-        
-
-        //foreach (Block block in blocks)
-        //{
-        //    if (block.Width > 512)
-        //    {
-        //        continue;
-        //    }
-        //    //debugging
-        //    //Debug.Log($"blockpos: {block.X}:{block.Y} width: {block.Width}");
-        //    //GameObject chunk = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        //    //chunk.transform.localScale = new Vector3(block.Width, block.Width, block.Width);
-        //    //chunk.transform.localPosition = new Vector3(block.X,1500,block.Y);
-        //    //chunk.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        //    //chunk.GetComponent<Renderer>().material = GetComponent<MeshGenerator>().material;
-        //    chunkWidth = block.Width;
-        //    int x = block.X;
-        //    int y = block.Y;
-        //    int offsetX = x - (chunkWidth / 2);
-        //    int offsetY = y - (chunkWidth / 2);
-
-        //    // Debug.Log($"x {x} y {y} width: {chunkWidth}");
-
-        //    //initialize voxelsize
-        //    InitializeVoxelSize(chunkWidth +1);
-
-        //    // Generate the voxel structure
-        //    GenerateVoxelStructure(offsetX, offsetY);
 
 
-        //    // generate mesh
-        //    Vector2Int chunkPos = new Vector2Int(offsetX, offsetY);
-        //    Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
-        //    GenerateMesh(chunkPos, tileposOffset, chunkWidth);
-
-
-        //}
-
-        for (int x = 0; x < numChunkX; x++)
+        foreach (Block block in blocks)
         {
-            for (int z = 0; z < numChunkZ; z++)
+            if (block.Width > 512)
             {
-                //calculate voxelsize based on chunkWidth
-                int resolutionMultiplier = Mathf.FloorToInt(2 * Mathf.Log(chunkWidth / 64f, 2));
-                int voxel_Size = Mathf.Clamp(minVoxelSize * resolutionMultiplier, 1, 32);
-
-                //initialize voxelsize
-                InitializeVoxelSize(chunkWidth + 1);
-
-                //  Debug.Log($"offsetX {chunkWidth * x} offsetZ {chunkWidth * z}");
-                // Generate the voxel structure
-                GenerateVoxelStructure(chunkWidth * x, chunkWidth * z);
-
-                // generate mesh
-                Vector2Int chunkPos = new Vector2Int((chunkWidth) * x, (chunkWidth) * z);
-                Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
-                GenerateMesh(chunkPos, tileposOffset, chunkWidth);
-
-                // Debug.Log($"chunk: {x}:{z} Done!");
+                continue;
             }
+            //debugging
+            //Debug.Log($"blockpos: {block.X}:{block.Y} width: {block.Width}");
+            //GameObject chunk = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            //chunk.transform.localScale = new Vector3(block.Width, block.Width, block.Width);
+            //chunk.transform.localPosition = new Vector3(block.X,1500,block.Y);
+            //chunk.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            //chunk.GetComponent<Renderer>().material = GetComponent<MeshGenerator>().material;
+            chunkWidth = block.Width;
+            int x = block.X;
+            int y = block.Y;
+            int offsetX = x - (chunkWidth / 2);
+            int offsetY = y - (chunkWidth / 2);
+
+            //calculate voxelsize based on chunkWidth
+            int resolutionMultiplier = Mathf.FloorToInt(2 * Mathf.Log(chunkWidth / 64f, 2));
+            int voxel_Size = Mathf.Clamp(minVoxelSize * resolutionMultiplier, 1, 32);
+
+           //  Debug.Log($"x {x} y {y} width: {chunkWidth}");
+
+            //initialize voxelsize
+            InitializeVoxelSize(chunkWidth + 1, voxel_Size);
+
+            // Generate the voxel structure
+            GenerateVoxelStructure(x - (chunkWidth/2), (y - chunkWidth/2), voxel_Size);
+
+
+            // generate mesh
+            Vector2Int chunkPos = new Vector2Int(offsetX, offsetY);
+            Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+            GenerateMesh(chunkPos, tileposOffset, chunkWidth);
+
+
         }
+
+        //for (int x = 0; x < numChunkX; x++)
+        //{
+        //    for (int z = 0; z < numChunkZ; z++)
+        //    {
+        //        //calculate voxelsize based on chunkWidth
+        //        int resolutionMultiplier = Mathf.FloorToInt(2 * Mathf.Log(chunkWidth / 64f, 2));
+        //        int voxel_Size = Mathf.Clamp(minVoxelSize * resolutionMultiplier, 1, 32);
+
+        //        //initialize voxelsize
+        //        InitializeVoxelSize(chunkWidth + 1, voxel_Size);
+
+        //        //  Debug.Log($"offsetX {chunkWidth * x} offsetZ {chunkWidth * z}");
+        //        // Generate the voxel structure
+        //        GenerateVoxelStructure(chunkWidth * x, chunkWidth * z, voxel_Size);
+
+        //        // generate mesh
+        //        Vector2Int chunkPos = new Vector2Int((chunkWidth) * x, (chunkWidth) * z);
+        //        Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+        //        GenerateMesh(chunkPos, tileposOffset, chunkWidth);
+
+        //        // Debug.Log($"chunk: {x}:{z} Done!");
+        //    }
+        //}
     }
 
     List<Block> GenerateBlocks(int tileX, int tileY)
@@ -337,7 +341,8 @@ public class VoxelGenerator : MonoBehaviour
 
             if (debug)
             {
-                DisplayVoxels(xVoxels + 1, yVoxels + 1);
+                //needs refactor to use blocks
+                //DisplayVoxels(xVoxels + 1, yVoxels + 1,);
 
             }
 
@@ -585,12 +590,12 @@ public class VoxelGenerator : MonoBehaviour
         }
     }
 
-    void InitializeVoxelSize(int maxWidth)
+    void InitializeVoxelSize(int maxWidth,int voxelSize)
     {
 
         // Calculate the number of voxels in each dimension
-        xVoxels = Mathf.CeilToInt(maxWidth / minVoxelSize);
-        yVoxels = Mathf.CeilToInt((float)height / minVoxelSize);
+        xVoxels = Mathf.CeilToInt(maxWidth / voxelSize);
+        yVoxels = Mathf.CeilToInt((float)height / voxelSize);
         zVoxels = xVoxels;
 
         // Initialize the voxelData array based on the calculated dimensions
@@ -623,7 +628,7 @@ public class VoxelGenerator : MonoBehaviour
         }
     }
 
-    private void GenerateVoxelStructure(int offsetX, int offsetZ)
+    private void GenerateVoxelStructure(int offsetX, int offsetZ,int voxelSize)
     {
         int voxelWidth = xVoxels + 1;
         int voxelHeight = yVoxels + 1;
@@ -642,8 +647,8 @@ public class VoxelGenerator : MonoBehaviour
             int zOffset = offsetZ;
 
             // Multiply the voxel positions by the voxel size first
-            x *= minVoxelSize;
-            z *= minVoxelSize;
+            x *= voxelSize;
+            z *= voxelSize;
 
             // Apply offsets
             x += xOffset;
@@ -656,7 +661,7 @@ public class VoxelGenerator : MonoBehaviour
             //sample the height map
             int index = (x * heightmapWidth) + z;
 
-            if (index > heightMap.Length)
+            if (index >= heightMap.Length)
             {
 
                 Debug.LogError($"x {x} y {y} z {z}");
@@ -673,7 +678,7 @@ public class VoxelGenerator : MonoBehaviour
             //if (water > 0)
             //    cummulatedHeights.Add(scaledHeight);
 
-            voxelData[_index].DistanceToSurface = (y * minVoxelSize) - scaledHeight;
+            voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
 
             if (y > highestlevel)
             {
@@ -689,7 +694,7 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log($"done filling data structure. highest level: {highestlevel}");
     }
 
-    private void DisplayVoxels(int voxelwidth, int voxelheight)
+    private void DisplayVoxels(int voxelwidth, int voxelheight,int voxelSize)
     {
 
 
@@ -702,9 +707,9 @@ public class VoxelGenerator : MonoBehaviour
 
             // Calculate the position of the voxel in world space
             Vector3 voxelPosition = new Vector3(
-                x * minVoxelSize,
-                y * minVoxelSize,
-                z * minVoxelSize
+                x * voxelSize,
+                y * voxelSize,
+                z * voxelSize
             );
 
             // Calculate a t value based on DistanceToSurface
@@ -719,7 +724,7 @@ public class VoxelGenerator : MonoBehaviour
                 // DrawCube(voxelPosition, voxelSize, voxelcol);
                 Gizmos.color = voxelcol;
             }
-            Gizmos.DrawWireCube(voxelPosition, new Vector3(minVoxelSize, minVoxelSize, minVoxelSize));
+            Gizmos.DrawWireCube(voxelPosition, new Vector3(voxelSize, voxelSize, voxelSize));
         }
     }
 
@@ -756,11 +761,11 @@ public class VoxelGenerator : MonoBehaviour
         Debug.DrawLine(vertices[3], vertices[7], color);
     }
 
-    public float GetVoxelSample(Vector3 worldposition)
+    public float GetVoxelSample(Vector3 worldposition,int voxelSize)
     {
-        int x = Mathf.FloorToInt(worldposition.x / minVoxelSize);
-        int y = Mathf.FloorToInt(worldposition.y / minVoxelSize);
-        int z = Mathf.FloorToInt(worldposition.z / minVoxelSize);
+        int x = Mathf.FloorToInt(worldposition.x / voxelSize);
+        int y = Mathf.FloorToInt(worldposition.y / voxelSize);
+        int z = Mathf.FloorToInt(worldposition.z / voxelSize);
 
         int voxelsWidth = xVoxels + 1;
         int voxelsHeight = yVoxels + 1;
@@ -803,7 +808,7 @@ public class VoxelGenerator : MonoBehaviour
         Vector2Int offset = new Vector2Int(chunkpos.x, chunkpos.y);
 
         MeshGenerator generator = GetComponent<MeshGenerator>();
-        generator.GenerateMesh(voxelLength, xVoxels, yVoxels, minVoxelSize, chunkSize, offset);
+        generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxel_Size, chunkSize, offset);
     }
 
     private void DestroyMesh(Vector2Int tilepos)

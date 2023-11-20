@@ -125,10 +125,10 @@ public class MeshGenerator : MonoBehaviour
             Vector3 worldpos = position + (WorldData.CornerTable[j] * voxelSize);
             if (worldpos.y == 2016)
             {
-                Debug.LogError($"worldpos: {position} corner: {WorldData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
-                break;
+                //Debug.LogError($"worldpos: {position} corner: {WorldData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
+                //break;
             }
-            cubes[j] = VoxelGenerator.GetVoxelSample(worldpos);
+            cubes[j] = VoxelGenerator.GetVoxelSample(worldpos,voxelSize);
         }
 
         //get configuration index of the cube
