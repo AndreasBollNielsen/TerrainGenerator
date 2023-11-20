@@ -41,19 +41,23 @@ public class MeshGenerator : MonoBehaviour
 
     }
 
-    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 worldSize, Vector2Int offset)
+    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset)
     {
-        float width = worldSize.x;
-         float height = worldSize.y;
-        //Debug.Log($" width: {width} voxelwidth: {voxelWidth}");
+        float width = chunkSize.x;
+        float height = chunkSize.y;
+     //   Debug.Log($" height: {height} voxelwidth: {voxelWidth}");
         for (int index = 0; index < voxelsLength; index++)
         {
 
 
             // Convert the 1D index to 3D coordinates
-            int x = index % voxelWidth;
-            int y = (index / voxelWidth) % voxelHeight;
-            int z = index / (voxelWidth * voxelHeight);
+            //int x = index % voxelWidth;
+            //int y = (index / voxelWidth) % voxelHeight;
+            //int z = index / (voxelWidth * voxelHeight);
+
+            int x = Mathf.FloorToInt(index % voxelWidth);
+            int y = Mathf.FloorToInt((index / voxelWidth) % voxelHeight);
+            int z = Mathf.FloorToInt(index / (voxelWidth * voxelHeight));
 
             // Calculate the position of the voxel in world space
             Vector3 voxelPosition = new Vector3(
@@ -62,18 +66,18 @@ public class MeshGenerator : MonoBehaviour
                 z * voxelSize
             );
 
-            if (voxelPosition.y < 63)
-            {
-                // Debug.Log($"offset {offset} position: {voxelPosition}");
-            }
+            
 
 
             //use marchingcube algorithm to generate triangles and vertices
-            if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
+            if (voxelPosition.x < width  && voxelPosition.z < width  && voxelPosition.y < height )
             {
-                MarchCube(voxelPosition, voxelSize, (int)(width /* + 14*/));
+                // Debug.Log($"position: {voxelPosition}");
+                MarchCube(voxelPosition, voxelSize, (int)(width));
 
             }
+
+
 
         }
 
@@ -118,7 +122,13 @@ public class MeshGenerator : MonoBehaviour
         for (int j = 0; j < 8; j++)
         {
             //samples terrain data at neigboring cells
-            cubes[j] = VoxelGenerator.GetVoxelSample(position + (WorldData.CornerTable[j] * voxelSize));
+            Vector3 worldpos = position + (WorldData.CornerTable[j] * voxelSize);
+            if (worldpos.y == 2016)
+            {
+                Debug.LogError($"worldpos: {position} corner: {WorldData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
+                break;
+            }
+            cubes[j] = VoxelGenerator.GetVoxelSample(worldpos);
         }
 
         //get configuration index of the cube

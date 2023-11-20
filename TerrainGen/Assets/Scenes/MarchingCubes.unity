@@ -683,8 +683,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   height: 2000
   width: 128
-  maxXchunks: 16
-  maxZchunks: 16
+  maxXchunks: 8
+  maxZchunks: 8
   maxXTiles: 1
   maxZTiles: 1
   voxelSize: 8
@@ -786,7 +786,7 @@ PrefabInstance:
     - target: {fileID: 9039066474616613192, guid: fd4cc2ed77fcc854e82a2fc3e125577d,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1600
+      value: 1800
       objectReference: {fileID: 0}
     - target: {fileID: 9039066474616613192, guid: fd4cc2ed77fcc854e82a2fc3e125577d,
         type: 3}
