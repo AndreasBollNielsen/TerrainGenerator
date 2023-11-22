@@ -5,6 +5,7 @@ using System.Linq;
 using TMPro;
 
 using UnityEngine;
+using UnityEngine.Profiling;
 using UnityEngine.UIElements;
 using static UnityEditor.PlayerSettings;
 using static UnityEngine.EventSystems.EventTrigger;
@@ -29,7 +30,7 @@ public class VoxelGenerator : MonoBehaviour
     Color[] heightMap;
     // Color[] WaterMap;
     int heightmapWidth;
-   
+
     public Vector3 offset;
     public Vector3 scale;
 
@@ -38,6 +39,7 @@ public class VoxelGenerator : MonoBehaviour
     [SerializeField] bool debug;
     [SerializeField] bool DebugTiles;
     [SerializeField] bool DebugBlocks;
+    [SerializeField] bool DebugPlayerRadius;
     TerrainTile[,] tiles;
 
     public Transform player;
@@ -46,20 +48,21 @@ public class VoxelGenerator : MonoBehaviour
     private int lastTileZ;
     int numChanges;
     List<float> cummulatedHeights = new List<float>();
-
+    Vector3 blockpos;
     private void Start()
     {
+
 
 
         tiles = new TerrainTile[maxXTiles, maxZTiles];
 
         lastpos = player.position;
-        lastTileX = Mathf.FloorToInt(lastpos.x / 2048); // Initial tile X
-        lastTileZ = Mathf.FloorToInt(lastpos.z / 2048);
+        lastTileX = Mathf.FloorToInt(lastpos.x / 128); // Initial tile X
+        lastTileZ = Mathf.FloorToInt(lastpos.z / 128);
+        blockpos = lastpos;
 
-
-        UpdateTilemap();
-
+        // UpdateTilemap();
+        initTiles();
         for (int xtile = 0; xtile < maxXTiles; xtile++)
         {
             for (int ytile = 0; ytile < maxZTiles; ytile++)
@@ -83,9 +86,10 @@ public class VoxelGenerator : MonoBehaviour
                     currentChunkSizeZ = maxZchunks;
                 }
 
+
                 //generating blocks
                 var blocks = GenerateBlocks(xtile, ytile);
-                Debug.Log($"block count: {blocks.Count}");
+                // Debug.Log($"block count: {blocks.Count}");
 
 
                 //iterating each chunk inside a tile
@@ -111,7 +115,6 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
-
         cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
         // Debug.Log("waterlevel: " + cummulatedHeights[0]);
         cummulatedHeights.Clear();
@@ -119,64 +122,64 @@ public class VoxelGenerator : MonoBehaviour
         var fps = FindObjectOfType<FPS_Controller>().enabled = true;
         // Invoke("testDynamicLOD", 5);
 
+
     }
 
     void GenerateChunks(List<Block> blocks, int numChunkX, int numChunkZ, int chunkWidth, Vector2Int tilepos)
     {
-      //  Debug.Log($"tilepos: {tilepos}");
+        // Debug.Log($"tilepos: {tilepos}");
 
         foreach (Block block in blocks)
         {
             //generate specific chunk level
-            //if (block.Width > 512)
+            //if (tilepos.x >= 2 && tilepos.y > 0)
             //{
             //    continue;
             //}
 
-            //debugging
-            //Debug.Log($"blockpos: {block.X}:{block.Y} width: {block.Width}");
-            //GameObject chunk = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            //chunk.transform.localScale = new Vector3(block.Width, block.Width, block.Width);
-            //chunk.transform.localPosition = new Vector3(block.X,1500,block.Y);
-            //chunk.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            //chunk.GetComponent<Renderer>().material = GetComponent<MeshGenerator>().material;
-           
+
+
             chunkWidth = block.Width;
             int x = block.X;
             int y = block.Y;
             int offsetX = x - (chunkWidth / 2);
             int offsetY = y - (chunkWidth / 2);
-            int tileWidth = heightmapWidth-1;
+            int tileWidth = heightmapWidth - 1;
 
-            
+
+
             // Calculate the modulo to ensure that offsetX and offsetY are within the height map bounds
             offsetX = (offsetX + tileWidth) % tileWidth;
             offsetY = (offsetY + tileWidth) % tileWidth;
 
-            
+
             //calculate voxelsize based on chunkWidth
             int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
-            // Debug.Log($"chunkWidth: {chunkWidth}, multiplier: {minVoxelSize}, voxel_Size: {voxel_Size}");
 
 
+            if (tilepos.x == 0 && tilepos.y == 1)
+            {
+
+                // Debug.Log($"chunkWidth: {chunkWidth}, offset: {offsetX}:{offsetY}");
+            }
 
             //initialize voxelsize
             InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
 
 
-           
-         
+
+
             // Generate the voxel structure
-            GenerateVoxelStructure(offsetX , offsetY, voxel_Size);
+            GenerateVoxelStructure(offsetY, offsetX, voxel_Size);
 
 
             // generate mesh
-            Vector2Int chunkPos = new Vector2Int(offsetX, offsetY);
+            Vector2Int chunkPos = new Vector2Int(offsetY, offsetX);
             Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
             GenerateMesh(chunkPos, tileposOffset, chunkWidth, voxel_Size);
 
 
-            
+
             //old way of generating meshes
             //for (int x = 0; x < numChunkX; x++)
             //{
@@ -205,23 +208,16 @@ public class VoxelGenerator : MonoBehaviour
 
     List<Block> GenerateBlocks(int tileX, int tileY)
     {
-
+        Profiler.BeginSample("generating blocks");
         int tileSize = 2048;
-        //TerrainTile tile = tiles[tileX, tileY];
         List<Block> filledBlocks = new List<Block>();
-
         Vector2 playerpos = new Vector2(player.transform.position.x, player.transform.position.z);
-
         Vector2 tileCenter = new Vector2((tileX + 0.5f) * tileSize, (tileY + 0.5f) * tileSize);
         float dist = Vector2.Distance(playerpos, tileCenter);
-        //if (tileX == 3 && tileY == 0)
-        //{
-        //    Debug.Log($"Dist: {dist} tile {tileX}:{tileY} rootpos: {tileCenter} width {width}");
 
-        //}
 
         //divide if player is within tile
-        if (dist < 2048 || tileX < 3 && tileY < 3)
+        if (dist < 3072)
         {
             filledBlocks = DividePosition(tileCenter, 2048, 2048, 2, playerpos, 1);
 
@@ -239,7 +235,7 @@ public class VoxelGenerator : MonoBehaviour
         filledBlocks = filledBlocks.OrderBy(block => block.Width).ToList();
 
 
-
+        Profiler.EndSample();
         return filledBlocks;
     }
 
@@ -249,18 +245,13 @@ public class VoxelGenerator : MonoBehaviour
 
         // Calculate half of the width and height
         float halfWidth = width / 2.0f;
-        float halfHeight = height / 2.0f; // This might need to be adjusted based on your requirements
+        float halfHeight = height / 2.0f;
 
         float centerX = center.x;
         float centerY = center.y;
-
-
-
         int nextLevel = level + 1;
-
         bool ignoreplayer = false;
 
-        // Debug.Log($"level: {level} width: {width} center: {centerX}:{centerY}");
 
         //ignore distance calculation & fill remaining blocks
         if (width == 128)
@@ -280,20 +271,9 @@ public class VoxelGenerator : MonoBehaviour
         foreach (var position in positions)
         {
             Vector3 adjustedPosition = new Vector3(position.x, 0, position.y);
-
-            if (level == 2 && center.x == 512 && center.y == 1536)
-            {
-                //  Debug.Log($"position: {positions[index]} center: {center} halfwidth: {halfWidth} halfHeight: {halfHeight}");
-
-            }
             index++;
-
             float dist = Vector2.Distance(playerpos, new Vector2(adjustedPosition.x, adjustedPosition.z));
-            if (level == 5)
-            {
-                //  Debug.Log($"Dist: {dist} width: {width} level: {level}");
 
-            }
             //divide if player is within block
             if (dist < width || ignoreplayer)
             {
@@ -310,7 +290,6 @@ public class VoxelGenerator : MonoBehaviour
                 {
                     // Add a block for each adjusted position
                     tempblocks.Add(CreateBlock(adjustedPosition, width / divisions));
-                    // Debug.Log("stopped at " + width);
                 }
             }
             else
@@ -320,16 +299,7 @@ public class VoxelGenerator : MonoBehaviour
 
             }
 
-
         }
-
-
-
-
-
-
-
-
 
         // Debug.Log(tempblocks.Count);
         return tempblocks;
@@ -338,8 +308,8 @@ public class VoxelGenerator : MonoBehaviour
         Block CreateBlock(Vector3 position, float width)
         {
             Block block = new Block((int)width);
-            block.X = (int)position.x /*- ((int)width / 2)*/;
-            block.Y = (int)position.z /*- ((int)width / 2)*/;
+            block.X = (int)position.x;
+            block.Y = (int)position.z;
             return block;
         }
     }
@@ -408,6 +378,8 @@ public class VoxelGenerator : MonoBehaviour
                 {
                     for (int y = 0; y < tiles.GetLength(1); y++)
                     {
+
+
                         var blocks = tiles[x, y].GetBlocks();
                         // Debug.Log(blocks.Count);
                         ////draw blocks
@@ -452,15 +424,22 @@ public class VoxelGenerator : MonoBehaviour
                                 Gizmos.color = Color.white;
                             }
 
-                            Vector3 cubepos = new Vector3(xblock, 0, yblock);
-                            Vector3 cubescale = new Vector3(width, width, width) - scale;
+
+                            Vector3 cubepos = new Vector3(xblock, 1500, yblock);
+                            Vector3 cubescale = new Vector3(width, 512, width) - scale;
                             Gizmos.DrawWireCube(cubepos, cubescale);
+                            // Debug.Log($"blockpos: {cubepos} width: {width}");
+
                         }
 
                     }
                 }
             }
 
+            if (DebugPlayerRadius)
+            {
+                Gizmos.DrawWireCube(blockpos, new Vector3(128, 128, 128));
+            }
         }
 #endif
     }
@@ -468,26 +447,23 @@ public class VoxelGenerator : MonoBehaviour
     private void Update()
     {
 
-
-        //if (debug)
-        //{
-        //    DisplayVoxels(xVoxels + 1, yVoxels + 1);
-
-        //}
-
-        // Debug.Log($"playerpos: {player.position} lastpos: {lastpos}");
-
-        int currentTileX = Mathf.FloorToInt(player.position.x / 2048); // Current tile X
-        int currentTileZ = Mathf.FloorToInt(player.position.z / 2048);
+        int currentBlockX = Mathf.RoundToInt(player.position.x / 128); // Current tile X
+        int currentBlockZ = Mathf.RoundToInt(player.position.z / 128);
 
         // Check if the player has moved to a new tile
-        if (currentTileX != lastTileX || currentTileZ != lastTileZ)
+        if (currentBlockX != lastTileX || currentBlockZ != lastTileZ)
         {
-            numChanges = 0;
-            UpdateTilemap();
-            Debug.Log($"number of changed tiles {numChanges}");
-            lastTileX = currentTileX;
-            lastTileZ = currentTileZ;
+            for (int x = 0; x < tiles.GetLength(0); x++)
+            {
+                for (int y = 0; y < tiles.GetLength(1); y++)
+                {
+                    UpdateBlocks(x, y);
+
+                }
+            }
+
+            lastTileX = currentBlockX;
+            lastTileZ = currentBlockZ;
         }
 
 
@@ -514,18 +490,10 @@ public class VoxelGenerator : MonoBehaviour
         }
     }
 
-    void testDynamicLOD()
-    {
-        player.position = new Vector3(2500, 0, 1024);
-        // VoxelGenerator_LODChanged(new Vector2Int(1, 0));
 
-    }
     private void VoxelGenerator_LODChanged(Vector2Int tilepos)
     {
-        //if(numChanges > 0)
-        //{
-        //    return;
-        //}
+       
 
         Debug.Log("rebuilding " + tilepos);
         //update mesh chunk per tile
@@ -552,56 +520,42 @@ public class VoxelGenerator : MonoBehaviour
 
     }
 
-    void UpdateTilemap()
+    void UpdateBlocks(int x, int y)
     {
-        Debug.Log("updating tiles");
+        Debug.Log("updating blocks");
 
-        initTiles();
-
-        int tileWidth = tiles.GetLength(0); // Assuming a rectangular array
-        int height = tiles.GetLength(1);
-        int tileSize = 2048;
-        int centerX = Mathf.FloorToInt(player.position.x / tileSize);
-        int centerY = Mathf.FloorToInt(player.position.z / tileSize);
-
-
-        // Debug.Log($"pos: {centerX}:{centerY} tiles: {tiles.Length}");
-        tiles[centerX, centerY].Width = width; // Initialize with the original value
-        int lastValue = tiles[centerX, centerY].Width;
-        int currentValue = lastValue * 2;
-
-        for (float radius = 0; radius <= 10; radius += 1.1f)
+        if (x < 0 || y < 0 && x < maxXTiles - 1 && y < maxZTiles - 1)
         {
-            for (int angle = 0; angle < 360; angle++) // Iterate through all angles (0-359 degrees)
-            {
-                double radianAngle = angle * (Math.PI / 180); // Convert angle to radians
-                int newX = centerX + Mathf.RoundToInt(radius * Mathf.Cos((float)radianAngle));
-                int newY = centerY + Mathf.RoundToInt(radius * Mathf.Sin((float)radianAngle));
-
-
-
-                // Check if the calculated point is within the array bounds
-                if (newX >= 0 && newX < tileWidth && newY >= 0 && newY < height)
-                {
-                    //skip if tile is origin
-                    if (newX == centerX && newY == centerY || tiles[newX, newY].Width >= width)
-                    {
-                        continue;
-                    }
-
-                    // Update the array with the current value
-                    tiles[newX, newY].Width = currentValue;
-
-
-                    // Update lastValue for the next iteration
-                    lastValue = currentValue;
-
-                    //  Debug.Log($"{newX}:{newY} value: {tiles[newX, newY].Width}");
-                }
-            }
-            currentValue = lastValue * 2; // Calculate the current value
-            currentValue = Mathf.Clamp(currentValue, 128, 2048);
+            return;
         }
+
+        //generate new blocks
+        var newblocks = GenerateBlocks(x, y);
+        var currentblocks = tiles[x, y].GetBlocks();
+
+
+        //compare & insert new blocks
+        int i = 0;
+        while (i < currentblocks.Count && i < newblocks.Count)
+        {
+            var currentblock = currentblocks[i];
+            var newblock = newblocks[i];
+
+            if (currentblock == null || newblock.Width != currentblock.Width || newblock.X != currentblock.X || newblock.Y != currentblock.Y)
+            {
+                // Remove elements from the current index to the end of the list
+                currentblocks.RemoveRange(i, currentblocks.Count - i);
+
+                // Insert remaining elements from the newblocks list
+                currentblocks.InsertRange(i, newblocks.GetRange(i, newblocks.Count - i));
+
+                // Break out of the loop since we've handled the replacements
+                break;
+            }
+
+            i++;
+        }
+
     }
 
     void InitializeVoxelSize(int maxWidth, int voxelSize)
@@ -742,38 +696,39 @@ public class VoxelGenerator : MonoBehaviour
         }
     }
 
-    private void DrawCube(Vector3 position, int size, Color color)
-    {
-        // Calculate half of the size to create the cube from the center
-        float halfSize = size / 2f;
+    //Deprecated
+    //private void DrawCube(Vector3 position, int size, Color color)
+    //{
+    //    // Calculate half of the size to create the cube from the center
+    //    float halfSize = size / 2f;
 
-        // Define the cube's vertices
-        Vector3[] vertices = new Vector3[]
-        {
-            new Vector3(position.x - halfSize, position.y - halfSize, position.z - halfSize),
-            new Vector3(position.x + halfSize, position.y - halfSize, position.z - halfSize),
-            new Vector3(position.x + halfSize, position.y - halfSize, position.z + halfSize),
-            new Vector3(position.x - halfSize, position.y - halfSize, position.z + halfSize),
-            new Vector3(position.x - halfSize, position.y + halfSize, position.z - halfSize),
-            new Vector3(position.x + halfSize, position.y + halfSize, position.z - halfSize),
-            new Vector3(position.x + halfSize, position.y + halfSize, position.z + halfSize),
-            new Vector3(position.x - halfSize, position.y + halfSize, position.z + halfSize)
-        };
+    //    // Define the cube's vertices
+    //    Vector3[] vertices = new Vector3[]
+    //    {
+    //        new Vector3(position.x - halfSize, position.y - halfSize, position.z - halfSize),
+    //        new Vector3(position.x + halfSize, position.y - halfSize, position.z - halfSize),
+    //        new Vector3(position.x + halfSize, position.y - halfSize, position.z + halfSize),
+    //        new Vector3(position.x - halfSize, position.y - halfSize, position.z + halfSize),
+    //        new Vector3(position.x - halfSize, position.y + halfSize, position.z - halfSize),
+    //        new Vector3(position.x + halfSize, position.y + halfSize, position.z - halfSize),
+    //        new Vector3(position.x + halfSize, position.y + halfSize, position.z + halfSize),
+    //        new Vector3(position.x - halfSize, position.y + halfSize, position.z + halfSize)
+    //    };
 
-        // Draw the edges of the cube using Debug.DrawLine
-        Debug.DrawLine(vertices[0], vertices[1], color);
-        Debug.DrawLine(vertices[1], vertices[2], color);
-        Debug.DrawLine(vertices[2], vertices[3], color);
-        Debug.DrawLine(vertices[3], vertices[0], color);
-        Debug.DrawLine(vertices[4], vertices[5], color);
-        Debug.DrawLine(vertices[5], vertices[6], color);
-        Debug.DrawLine(vertices[6], vertices[7], color);
-        Debug.DrawLine(vertices[7], vertices[4], color);
-        Debug.DrawLine(vertices[0], vertices[4], color);
-        Debug.DrawLine(vertices[1], vertices[5], color);
-        Debug.DrawLine(vertices[2], vertices[6], color);
-        Debug.DrawLine(vertices[3], vertices[7], color);
-    }
+    //    // Draw the edges of the cube using Debug.DrawLine
+    //    Debug.DrawLine(vertices[0], vertices[1], color);
+    //    Debug.DrawLine(vertices[1], vertices[2], color);
+    //    Debug.DrawLine(vertices[2], vertices[3], color);
+    //    Debug.DrawLine(vertices[3], vertices[0], color);
+    //    Debug.DrawLine(vertices[4], vertices[5], color);
+    //    Debug.DrawLine(vertices[5], vertices[6], color);
+    //    Debug.DrawLine(vertices[6], vertices[7], color);
+    //    Debug.DrawLine(vertices[7], vertices[4], color);
+    //    Debug.DrawLine(vertices[0], vertices[4], color);
+    //    Debug.DrawLine(vertices[1], vertices[5], color);
+    //    Debug.DrawLine(vertices[2], vertices[6], color);
+    //    Debug.DrawLine(vertices[3], vertices[7], color);
+    //}
 
     public float GetVoxelSample(Vector3 worldposition, int voxelSize)
     {
@@ -784,21 +739,11 @@ public class VoxelGenerator : MonoBehaviour
         int voxelsWidth = xVoxels + 1;
         int voxelsHeight = yVoxels + 1;
 
-
-        //// Clamp to the bounds of the voxel grid
-        //x = Mathf.Clamp(x, 0, xVoxels - 1);
-        //y = Mathf.Clamp(y, 0, yVoxels - 1);
-        //z = Mathf.Clamp(z, 0, zVoxels - 1);
-        if (x == 22 || z == 22)
-        {
-            //  Debug.LogError($"position: {worldposition} ");
-        }
-
         int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
         if (voxelIndex >= voxelData.Length)
         {
-            // Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
-            // UnityEditor.EditorApplication.isPlaying = false;
+            Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
+            UnityEditor.EditorApplication.isPlaying = false;
 
 
             return -1;
@@ -808,16 +753,7 @@ public class VoxelGenerator : MonoBehaviour
 
     private void GenerateMesh(Vector2Int chunkpos, Vector2Int tilepos, int maxChunkWidth, int voxelSize)
     {
-
-
-        // int resolutionMultiplier = Mathf.FloorToInt(2 * Mathf.Log(maxChunkWidth / 64f, 2));
-        //int voxel_Size = Mathf.Clamp(minVoxelSize * resolutionMultiplier, 1, 32);
-        // Debug.Log($"resolutionMult: {voxel_Size}");
-
-
         int voxelLength = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
-        // Debug.Log($"voxelWidth {xVoxels} voxelheight {yVoxels} voxellength: {voxelLength}");
-
         Vector2 chunkSize = new Vector2(maxChunkWidth, height);
         Vector2Int offset = new Vector2Int(chunkpos.x, chunkpos.y);
 

@@ -9,6 +9,7 @@ public class Block
     List<Chunk_v> chunks;
     public int X;
     public int Y;
+    public bool Loaded;
    
     Dictionary<int, int> lodSelector;
 
