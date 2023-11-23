@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class Chunk_v
 {
+    public int blockId;
     public Mesh mesh;
     public GameObject chunkObject;
 }

@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-//using System.Drawing;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -37,11 +36,9 @@ public class MeshGenerator : MonoBehaviour
             Destroy(chunks[i].chunkObject);
         }
 
-        // objects.Clear();    
-
     }
 
-    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset)
+    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset,int blockId)
     {
         float width = chunkSize.x;
         float height = chunkSize.y;
@@ -103,6 +100,7 @@ public class MeshGenerator : MonoBehaviour
         Chunk_v chunk = new Chunk_v();
         chunk.chunkObject = go;
         chunk.mesh = mesh;
+        chunk.blockId = blockId;
 
 
         chunks.Add(chunk);

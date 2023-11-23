@@ -1,11 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class TerrainTile
 {
-    private List<Chunk_v> meshChunks;
+    //private List<Chunk_v> meshChunks;
     private List<Block> blocks;
     private GameObject tileObject;
     int width;
@@ -20,7 +21,7 @@ public class TerrainTile
         this.X = _x;
         this.Y = _y;
 
-        meshChunks = new List<Chunk_v>();
+        //meshChunks = new List<Chunk_v>();
         blocks = new List<Block>();
 
         lodSelector = new Dictionary<int, int>() {
@@ -50,8 +51,8 @@ public class TerrainTile
                 {
                     if (lastState != value)
                     {
-                       // Debug.Log($"changed from {lastState} to {value}");
-                      //  Debug.Log($"triggered: {Width} tilepos: {X}:{Y}");
+                        // Debug.Log($"changed from {lastState} to {value}");
+                        //  Debug.Log($"triggered: {Width} tilepos: {X}:{Y}");
                         lastState = value;
                         LODChanged?.Invoke(new Vector2Int(X, Y));
                     }
@@ -66,8 +67,15 @@ public class TerrainTile
 
     public void AddChunks(List<Chunk_v> chunks)
     {
-        meshChunks.Clear();
-        meshChunks.AddRange(chunks);
+        for (int i = 0; i < blocks.Count; i++)
+        {
+
+            var chunk = chunks.FirstOrDefault(x => x.blockId == i);
+            if (chunk != null)
+            {
+                blocks[i].AddChunk(chunk);
+            }
+        }
 
 
     }
@@ -78,31 +86,48 @@ public class TerrainTile
         blocks.AddRange(_blocks);
     }
 
-   public List<Block> GetBlocks()
+    public List<Block> GetBlocks()
     {
         return blocks;
     }
 
-    public List<Chunk_v> RemoveChunks()
-    {
-        return meshChunks;
-    }
+    //public List<Chunk_v> RemoveChunks()
+    //{
+    //    return meshChunks;
+    //}
 
 
 
     public GameObject GetTileObject()
     {
-        return tileObject;
+        if (tileObject != null)
+        {
+            return tileObject;
+
+        }
+        return null;
     }
 
     public void SetChunksParent(GameObject parent)
     {
-        foreach (var chunk in meshChunks)
+        foreach (var block in blocks)
         {
-            chunk.chunkObject.transform.SetParent(parent.transform, false);
+            if (block.GetChunk() != null)
+            {
+                block.GetChunk().chunkObject.transform.SetParent(parent.transform, false);
+
+            }
+            else
+            {
+                Debug.LogError($"chunk class at {block.GetPosition()} is null");
+            }
 
         }
 
-        tileObject = parent;
+        if (tileObject == null)
+        {
+            tileObject = parent;
+
+        }
     }
 }
