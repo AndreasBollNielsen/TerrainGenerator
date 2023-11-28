@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using Unity.Entities.UniversalDelegates;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -10,6 +12,13 @@ public class MeshGenerator : MonoBehaviour
     List<Color> colors = new List<Color>();
     float surfaceDensity = WorldData.surfaceDensity;
     VoxelGenerator VoxelGenerator;
+
+    //define chunk edges
+    List<int> topEdge = new List<int>();
+    List<int> bottomEdge = new List<int>();
+    List<int> leftEdge = new List<int>();
+    List<int> rightEdge = new List<int>();
+
 
 
     public Material material;
@@ -38,11 +47,11 @@ public class MeshGenerator : MonoBehaviour
 
     }
 
-    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset,int blockId)
+    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId)
     {
         float width = chunkSize.x;
         float height = chunkSize.y;
-     //   Debug.Log($" height: {height} voxelwidth: {voxelWidth}");
+        //   Debug.Log($" height: {height} voxelwidth: {voxelWidth}");
         for (int index = 0; index < voxelsLength; index++)
         {
 
@@ -63,11 +72,11 @@ public class MeshGenerator : MonoBehaviour
                 z * voxelSize
             );
 
-            
+
 
 
             //use marchingcube algorithm to generate triangles and vertices
-            if (voxelPosition.x < width  && voxelPosition.z < width  && voxelPosition.y < height )
+            if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
             {
                 // Debug.Log($"position: {voxelPosition}");
                 MarchCube(voxelPosition, voxelSize, (int)(width));
@@ -78,12 +87,61 @@ public class MeshGenerator : MonoBehaviour
 
         }
 
+        //for (int i = 0; i < vertices.Count; i++)
+        //{
+        //    Color col = new Color(0.5f, 0.5f, 0.5f);
+        //    colors.Add(col);
+        //}
+
+        // Debug.Log($"topedge: {topEdge.Count} bottomedge: {bottomEdge.Count} leftedge: {leftEdge.Count} rightedge {rightEdge.Count} total vertices: {colors.Count}");
+
+        //test edge detection
+        //for (int i = 0; i < topEdge.Count; i++)
+        //{
+        //    Color col = Color.red;
+        //    int triangleIndex = topEdge[i];
+
+        //    if (triangleIndex < colors.Count)
+        //        colors[triangleIndex] = col;
+
+        //}
+
+        //for (int i = 0; i < bottomEdge.Count; i++)
+        //{
+        //    Color col = Color.green;
+        //    int triangleIndex = bottomEdge[i];
+
+        //    if (triangleIndex < colors.Count)
+        //        colors[triangleIndex] = col;
+
+        //}
+
+        //for (int i = 0; i < leftEdge.Count; i++)
+        //{
+        //    Color col = Color.blue;
+        //    int triangleIndex = leftEdge[i];
+
+        //    if (triangleIndex < colors.Count)
+        //        colors[triangleIndex] = col;
+
+        //}
+
+        //for (int i = 0; i < rightEdge.Count; i++)
+        //{
+        //    Color col = Color.yellow;
+        //    int triangleIndex = rightEdge[i];
+
+        //    if (triangleIndex < colors.Count)
+        //        colors[triangleIndex] = col;
+
+        //}
+
 
         Mesh mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
-        mesh.colors = colors.ToArray();
+        //  mesh.colors = colors.ToArray();
         mesh.RecalculateNormals();
 
 
@@ -101,14 +159,46 @@ public class MeshGenerator : MonoBehaviour
         chunk.chunkObject = go;
         chunk.mesh = mesh;
         chunk.blockId = blockId;
-
-
+        chunk.CopyEdges(topEdge, bottomEdge, leftEdge, rightEdge);
+       // RemoveTrianglesAlongBorder(chunk.mesh, chunk.border);
         chunks.Add(chunk);
 
         triangles.Clear();
         vertices.Clear();
         colors.Clear();
 
+        topEdge.Clear();
+        bottomEdge.Clear();
+        leftEdge.Clear();
+        rightEdge.Clear();
+
+
+       
+
+    }
+
+    void RemoveTrianglesAlongBorder(Mesh mesh, List<int> borderEdgeVertices)
+    {
+        // Get the mesh triangles array
+        int[] triangles = mesh.triangles;
+
+        // Remove triangles associated with border edge vertices
+        for (int i = 0; i < triangles.Length; i += 3)
+        {
+            int vertexIndex0 = triangles[i];
+            int vertexIndex1 = triangles[i + 1];
+            int vertexIndex2 = triangles[i + 2];
+
+            // Check if any vertex index is part of the border
+            if (borderEdgeVertices.Contains(vertexIndex0) || borderEdgeVertices.Contains(vertexIndex1) || borderEdgeVertices.Contains(vertexIndex2))
+            {
+                // Set triangle indices to -1 or any sentinel value
+                triangles[i] = triangles[i + 1] = triangles[i + 2] = -1;
+            }
+        }
+
+        // Remove triangles with sentinel indices
+        mesh.triangles = triangles.Where(index => index != -1).ToArray();
     }
 
     void MarchCube(Vector3 position, int voxelSize, int width)
@@ -126,7 +216,7 @@ public class MeshGenerator : MonoBehaviour
                 Debug.LogError($"worldpos: {position} corner: {WorldData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
                 //break;
             }
-            cubes[j] = VoxelGenerator.GetVoxelSample(worldpos,voxelSize);
+            cubes[j] = VoxelGenerator.GetVoxelSample(worldpos, voxelSize);
         }
 
         //get configuration index of the cube
@@ -180,7 +270,9 @@ public class MeshGenerator : MonoBehaviour
 
 
                 //add vertices and triangles
-                triangles.Add(VertForIndice(vertexPosition, position));
+                int vertIndex = VertForIndice(vertexPosition, position);
+                DetectEges(vertexPosition, vertIndex);
+                triangles.Add(vertIndex);
 
 
 
@@ -209,8 +301,7 @@ public class MeshGenerator : MonoBehaviour
             //    Debug.Log($"vert: {vert} width: {width}");
             //}
 
-            //chck edges
-            color = DetectEges(vert, voxelPos);
+
 
             //if (color == Color.red)
             //{
@@ -219,37 +310,39 @@ public class MeshGenerator : MonoBehaviour
 
             // if it does not exist in list, add it to the list
             vertices.Add(vert);
-            //  colors.Add(color);
+            colors.Add(color);
             // var colorIndex = WorldGenerator.Instance.terrainMap[WorldToVoxelIndex(voxelPos.x, voxelPos.y, voxelPos.z)].TexIndex;
             // colors.Add(GetColorIndex(colorIndex));
-
-
 
             return vertices.Count - 1;
         }
 
-        Color DetectEges(Vector3 vert, Vector3 voxelPos)
+        Color DetectEges(Vector3 vert, int vertIndex)
         {
             Color color = Color.white;
 
             //detect top edge
-            if (vert.z == width)
+            if (vert.z >= width )
             {
+                topEdge.Add(vertIndex);
                 return Color.red;
             }
             //detect bottom edge
             else if (vert.z == 0)
             {
+                bottomEdge.Add(vertIndex);
                 return Color.red;
             }
             //detect left edge
-            else if (vert.x == width)
+            else if (vert.x >= width)
             {
+                leftEdge.Add(vertIndex);
                 return Color.red;
             }
             //detect right edge
             else if (vert.x == 0)
             {
+                rightEdge.Add(vertIndex);
                 return Color.red;
             }
 

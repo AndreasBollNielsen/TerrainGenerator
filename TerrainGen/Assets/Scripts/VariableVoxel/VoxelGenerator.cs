@@ -71,52 +71,42 @@ public class VoxelGenerator : MonoBehaviour
 
 
                 // Calculate max chunk width based on tile position
-                int maxChunkWidth = tiles[xtile, ytile].Width;
-                int currentChunkSizeX = tiles[xtile, ytile].NumChunks;
-                int currentChunkSizeZ = currentChunkSizeX;
-                // Debug.Log(currentChunkSizeX);
+                //int maxChunkWidth = tiles[xtile, ytile].Width;
+                //int currentChunkSizeX = tiles[xtile, ytile].NumChunks;
+                //int currentChunkSizeZ = currentChunkSizeX;
+                //// Debug.Log(currentChunkSizeX);
 
-                if (maxXchunks < currentChunkSizeX)
-                {
-                    currentChunkSizeX = maxXchunks;
-                }
+                //if (maxXchunks < currentChunkSizeX)
+                //{
+                //    currentChunkSizeX = maxXchunks;
+                //}
 
-                if (maxZchunks < currentChunkSizeZ)
-                {
-                    currentChunkSizeZ = maxZchunks;
-                }
+                //if (maxZchunks < currentChunkSizeZ)
+                //{
+                //    currentChunkSizeZ = maxZchunks;
+                //}
 
 
                 //generating blocks
                 var blocks = GenerateBlocks(xtile, ytile);
-                 Debug.Log($"block count: {blocks.Count}");
-               
+               // Debug.Log($"block count: {blocks.Count}");
+
                 //remove portion of the blocks
-               // blocks.RemoveRange(4, ( blocks.Count-4));
+               //  blocks.RemoveRange(4, ( blocks.Count-4));
 
                 //iterating each chunk inside a tile
-               // GenerateChunks(blocks);
+                 GenerateChunks(blocks);
 
                 //generate chunks async
-                Vector2Int tilepos = new Vector2Int(xtile, ytile);
-                object[] parameter = new object[2] {blocks, tilepos };
-                StartCoroutine("GenerateChunksAsync", parameter);
+                //Vector2Int tilepos = new Vector2Int(xtile, ytile);
+                //object[] parameter = new object[2] { blocks, tilepos };
+                //StartCoroutine("GenerateChunksAsync", parameter);
 
 
                 //generate new tile
-                //int tileSize = heightmapWidth - 1;
-                //TerrainTile tile = tiles[xtile, ytile];
-                //tile.AddBlocks(blocks);
-                //tile.AddChunks(GetComponent<MeshGenerator>().CopyChunks());
-                //GetComponent<MeshGenerator>().ClearList();
-                //GameObject terrainTile = new GameObject();
-                //tile.SetChunksParent(terrainTile);
-                //Vector3 tileposition = new Vector3(tileSize * xtile, 0, tileSize * ytile);
-                //terrainTile.transform.position = tileposition;
-                //terrainTile.name = $"Tile_{xtile}_{ytile}";
-                //terrainTile.transform.SetParent(gameObject.transform, false);
-                //tiles[xtile, ytile] = tile;
+                GenerateTile(xtile, ytile, blocks);
                 
+
             }
         }
 
@@ -126,13 +116,13 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log("waterlevel: " + cummulatedHeights[0]);
         cummulatedHeights.Clear();
 
-       
+
         // Invoke("testDynamicLOD", 5);
 
 
     }
 
-    void GenerateTile(int xtile,int ytile,List<Block> blocks)
+    void GenerateTile(int xtile, int ytile, List<Block> blocks)
     {
         //generate new tile
         int tileSize = heightmapWidth - 1;
@@ -162,7 +152,7 @@ public class VoxelGenerator : MonoBehaviour
             //{
             //    continue;
             //}
-           
+
             if (block.Loaded)
             {
                 blockId++;
@@ -188,7 +178,7 @@ public class VoxelGenerator : MonoBehaviour
             int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
 
 
-
+            Profiler.BeginSample("generating voxels");
             //initialize voxelsize
             InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
 
@@ -197,15 +187,17 @@ public class VoxelGenerator : MonoBehaviour
 
             // Generate the voxel structure
             GenerateVoxelStructure(offsetY, offsetX, voxel_Size);
-
+            Profiler.EndSample();
 
             // generate mesh
             Vector2Int chunkPos = new Vector2Int(offsetY, offsetX);
             // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+
+            Profiler.BeginSample("Generating mesh");
             GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId);
 
             blockId++;
-
+            Profiler.EndSample();
 
         }
     }
@@ -242,29 +234,30 @@ public class VoxelGenerator : MonoBehaviour
             int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
 
 
-
+          
             //initialize voxelsize
             InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
-
 
 
 
             // Generate the voxel structure
             GenerateVoxelStructure(offsetY, offsetX, voxel_Size);
 
+           
 
             // generate mesh
             Vector2Int chunkPos = new Vector2Int(offsetY, offsetX);
             // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+           
             GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId);
-
+          
             blockId++;
             yield return new WaitForEndOfFrame();
 
         }
 
         GenerateTile(tilepos.x, tilepos.y, blocks);
-        
+
     }
 
     List<Block> GenerateBlocks(int tileX, int tileY)
@@ -449,6 +442,7 @@ public class VoxelGenerator : MonoBehaviour
                             int xblock = blocks[i].X;
                             int yblock = blocks[i].Y;
                             int width = blocks[i].Width;
+                            var chunk = blocks[i].GetChunk();
                             // Debug.Log($"xblock {xblock} yblock {yblock} width {width}");
                             Color col = new Color(0, 0, 0);
 
@@ -490,6 +484,9 @@ public class VoxelGenerator : MonoBehaviour
                             Vector3 cubescale = new Vector3(width, 512, width) - scale;
                             Gizmos.DrawWireCube(cubepos, cubescale);
                             // Debug.Log($"blockpos: {cubepos} width: {width}");
+
+
+
 
                         }
 
@@ -617,7 +614,7 @@ public class VoxelGenerator : MonoBehaviour
                 currentblocks.InsertRange(i, newblocks.GetRange(i, newblocks.Count - i));
 
                 // Call DestroyChunk on the old part of the list
-               // Debug.Log($"number of chunks to remove: {blocksToRemove.Count} ");
+                // Debug.Log($"number of chunks to remove: {blocksToRemove.Count} ");
                 foreach (var block in blocksToRemove)
                 {
 
@@ -652,7 +649,8 @@ public class VoxelGenerator : MonoBehaviour
 
     void InitializeHeightmap(int x, int y)
     {
-        string textureName = $"Textures\\heightmap_{x}_{y}";
+      //  string textureName = $"Textures\\heightmap_{x}_{y}";
+        string textureName = $"RawHeightmaps\\Heightmap_{x}_{y}";
         string WatertextureName = $"Textures\\WaterMask_{x}_{y}";
         // Debug.Log(textureName);
         Texture2D heightmapTexture = Resources.Load<Texture2D>(textureName);
@@ -718,7 +716,7 @@ public class VoxelGenerator : MonoBehaviour
             // Color sampleWater = WaterMap[index];
             float sampledHeight = sampledColor.r;
             // float water = sampleWater.r * 850;
-            float scaledHeight = sampledHeight * 2000 ;
+            float scaledHeight = sampledHeight * 2000;
 
             //if (water > 0)
             //    cummulatedHeights.Add(scaledHeight);
@@ -838,5 +836,5 @@ public class VoxelGenerator : MonoBehaviour
         generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId);
     }
 
-    
+
 }
