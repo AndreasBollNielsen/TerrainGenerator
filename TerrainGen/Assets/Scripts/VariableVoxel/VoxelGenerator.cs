@@ -112,9 +112,9 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
-        cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
+        //cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
         // Debug.Log("waterlevel: " + cummulatedHeights[0]);
-        cummulatedHeights.Clear();
+        //cummulatedHeights.Clear();
 
 
         // Invoke("testDynamicLOD", 5);
@@ -258,6 +258,9 @@ public class VoxelGenerator : MonoBehaviour
 
         GenerateTile(tilepos.x, tilepos.y, blocks);
 
+        cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
+        Debug.Log($"highest level: {cummulatedHeights[0]} lowest level: {cummulatedHeights[cummulatedHeights.Count-1]}");
+        cummulatedHeights.Clear();
     }
 
     List<Block> GenerateBlocks(int tileX, int tileY)
@@ -649,8 +652,8 @@ public class VoxelGenerator : MonoBehaviour
 
     void InitializeHeightmap(int x, int y)
     {
-      //  string textureName = $"Textures\\heightmap_{x}_{y}";
-        string textureName = $"RawHeightmaps\\Heightmap_{x}_{y}";
+       
+        string textureName = $"Textures\\heightmap_{x}_{y}";
         string WatertextureName = $"Textures\\WaterMask_{x}_{y}";
         // Debug.Log(textureName);
         Texture2D heightmapTexture = Resources.Load<Texture2D>(textureName);
@@ -692,6 +695,7 @@ public class VoxelGenerator : MonoBehaviour
             // Multiply the voxel positions by the voxel size first
             x *= voxelSize;
             z *= voxelSize;
+            y *= voxelSize;
 
             // Apply offsets
             x += xOffset;
@@ -716,12 +720,13 @@ public class VoxelGenerator : MonoBehaviour
             // Color sampleWater = WaterMap[index];
             float sampledHeight = sampledColor.r;
             // float water = sampleWater.r * 850;
-            float scaledHeight = sampledHeight * 2000;
+            float scaledHeight = sampledHeight * height;
 
             //if (water > 0)
-            //    cummulatedHeights.Add(scaledHeight);
+              //  cummulatedHeights.Add(sampledHeight);
 
-            voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
+          //  voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
+            voxelData[_index].DistanceToSurface = y - scaledHeight ;
 
             if (y > highestlevel)
             {
