@@ -32,11 +32,11 @@ public static class WorldData
         float frequency = 16f;
         float amplitude = 1.5f;
 
-        
+
         Color sampledColor = heightmapTexture.GetPixel(x, z);
 
         //get noise value
-       // float perlinNoise = Mathf.PerlinNoise((float)x / frequency * amplitude, (float)z / frequency * amplitude);
+        // float perlinNoise = Mathf.PerlinNoise((float)x / frequency * amplitude, (float)z / frequency * amplitude);
 
         // Extract the height value from the color (assuming grayscale texture)
         float sampledHeight = sampledColor.r;
@@ -44,7 +44,8 @@ public static class WorldData
         // Scale and offset the sampled height based on your desired values
         float scaledHeight = sampledHeight * (MaxTerrainHeight + BaseHeight) /*+ perlinNoise*/;
 
-        if(x == 0 && z == 0) {
+        if (x == 0 && z == 0)
+        {
             Debug.Log(scaledHeight);
         }
 
@@ -364,7 +365,7 @@ public static class WorldData
             int z = _index % width;
             int x = _index / (width * height);
 
-           // float perlinNoise = Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)z / 16f * 1.5f);
+            // float perlinNoise = Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)z / 16f * 1.5f);
 
             //sample the height map
             Color sampledColor = heightMap[x * textureSize + z];
@@ -374,6 +375,14 @@ public static class WorldData
             return scaledHeight;
 
         }
+    }
+
+    public struct TerrainData
+    {
+
+        public int[,] TriangleTable;
+        public int[,] EdgeIndexes;
+        public  Vector3Int[] CornerTable;
     }
 }
 

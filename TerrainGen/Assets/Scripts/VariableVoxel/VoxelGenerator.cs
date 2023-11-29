@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
-
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.UIElements;
@@ -17,8 +19,8 @@ public class VoxelGenerator : MonoBehaviour
 
     [SerializeField] int height;
     [SerializeField] int width;
-    [Range(1, 16)][SerializeField] int maxXchunks;
-    [Range(1, 16)][SerializeField] int maxZchunks;
+    // [Range(1, 16)][SerializeField] int maxXchunks;
+    // [Range(1, 16)][SerializeField] int maxZchunks;
     [Range(1, 7)][SerializeField] int maxXTiles;
     [Range(1, 7)][SerializeField] int maxZTiles;
     [Range(1, 64)][SerializeField] int minVoxelSize;
@@ -27,13 +29,13 @@ public class VoxelGenerator : MonoBehaviour
     int xVoxels;
     int yVoxels;
     int zVoxels;
-    VoxelData[] voxelData; // One-dimensional array to store voxel colors
+    //VoxelData[] voxelData; // One-dimensional array to store voxel colors
     Color[] heightMap;
     // Color[] WaterMap;
     int heightmapWidth;
 
-    public Vector3 offset;
-    public Vector3 scale;
+    // public Vector3 offset;
+    //  public Vector3 scale;
 
     [SerializeField] Color startColor = Color.blue;  // Color for low DistanceToSurface values
     [SerializeField] Color endColor = new Color(1, 0, 0, 0);     // Color for high DistanceToSurface values
@@ -67,35 +69,21 @@ public class VoxelGenerator : MonoBehaviour
         {
             for (int ytile = 0; ytile < maxZTiles; ytile++)
             {
-                InitializeHeightmap(xtile, ytile);
+                var heightmap = InitializeHeightmap(xtile, ytile);
 
 
-                // Calculate max chunk width based on tile position
-                //int maxChunkWidth = tiles[xtile, ytile].Width;
-                //int currentChunkSizeX = tiles[xtile, ytile].NumChunks;
-                //int currentChunkSizeZ = currentChunkSizeX;
-                //// Debug.Log(currentChunkSizeX);
 
-                //if (maxXchunks < currentChunkSizeX)
-                //{
-                //    currentChunkSizeX = maxXchunks;
-                //}
-
-                //if (maxZchunks < currentChunkSizeZ)
-                //{
-                //    currentChunkSizeZ = maxZchunks;
-                //}
 
 
                 //generating blocks
                 var blocks = GenerateBlocks(xtile, ytile);
-               // Debug.Log($"block count: {blocks.Count}");
+                // Debug.Log($"block count: {blocks.Count}");
 
                 //remove portion of the blocks
-               //  blocks.RemoveRange(4, ( blocks.Count-4));
+                //  blocks.RemoveRange(4, ( blocks.Count-4));
 
                 //iterating each chunk inside a tile
-                 GenerateChunks(blocks);
+                GenerateChunks(blocks, heightmap);
 
                 //generate chunks async
                 //Vector2Int tilepos = new Vector2Int(xtile, ytile);
@@ -104,8 +92,8 @@ public class VoxelGenerator : MonoBehaviour
 
 
                 //generate new tile
-                GenerateTile(xtile, ytile, blocks);
-                
+              //  GenerateTile(xtile, ytile, blocks);
+
 
             }
         }
@@ -141,10 +129,12 @@ public class VoxelGenerator : MonoBehaviour
         var fps = FindObjectOfType<FPS_Controller>().enabled = true;
     }
 
-    void GenerateChunks(List<Block> blocks)
+    void GenerateChunks(List<Block> blocks, Color[] heightmap)
     {
         // Debug.Log($"tilepos: {tilepos}");
         int blockId = 0;
+        NativeArray<Color> heightMap = new NativeArray<Color>(heightmap, allocator: Allocator.TempJob);
+       // NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(blocks.Count,allocator: Allocator.TempJob);
         foreach (Block block in blocks)
         {
             //generate specific chunk level
@@ -177,16 +167,35 @@ public class VoxelGenerator : MonoBehaviour
             //calculate voxelsize based on chunkWidth
             int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
 
+            Profiler.BeginSample("initializing voxels");
+            //initialize voxelsize
+            var data = InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
+            Profiler.EndSample();
 
             Profiler.BeginSample("generating voxels");
-            //initialize voxelsize
-            InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
-
-
 
 
             // Generate the voxel structure
-            GenerateVoxelStructure(offsetY, offsetX, voxel_Size);
+            // GenerateVoxelStructure(offsetY, offsetX, voxel_Size,data);
+
+            //Generate voxel structure using job system
+            NativeArray<VoxelData> voxelData = new NativeArray<VoxelData>(data, allocator: Allocator.TempJob);
+
+            GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
+            {
+                offsetX = offsetY,
+                offsetZ = offsetX,
+                voxelSize = voxel_Size,
+                heightmapWidth = heightmapWidth,
+                height = height,
+                voxelHeight = yVoxels + 1,
+                voxelWidth = xVoxels + 1,
+                voxelData = voxelData,
+                heightMap = heightMap,
+            };
+            var jobhandle = voxelStructure_Job.Schedule(voxelData.Length, 64);
+           // jobs[blockId] = jobhandle;
+            jobhandle.Complete();
             Profiler.EndSample();
 
             // generate mesh
@@ -194,12 +203,18 @@ public class VoxelGenerator : MonoBehaviour
             // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
 
             Profiler.BeginSample("Generating mesh");
-            GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId);
+          //  GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, voxelData.ToArray());
+           // GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, data);
 
             blockId++;
             Profiler.EndSample();
 
+
+            //dispose native arrays
+            voxelData.Dispose();
         }
+       // JobHandle.CompleteAll(jobs);
+        heightMap.Dispose();
     }
 
     IEnumerator GenerateChunksAsync(object[] myparams)
@@ -234,23 +249,23 @@ public class VoxelGenerator : MonoBehaviour
             int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
 
 
-          
+
             //initialize voxelsize
-            InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
+            var voxelData = InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
 
 
 
             // Generate the voxel structure
-            GenerateVoxelStructure(offsetY, offsetX, voxel_Size);
+            GenerateVoxelStructure(offsetY, offsetX, voxel_Size, voxelData);
 
-           
+
 
             // generate mesh
             Vector2Int chunkPos = new Vector2Int(offsetY, offsetX);
             // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
-           
-            GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId);
-          
+
+            GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, voxelData);
+
             blockId++;
             yield return new WaitForEndOfFrame();
 
@@ -259,7 +274,7 @@ public class VoxelGenerator : MonoBehaviour
         GenerateTile(tilepos.x, tilepos.y, blocks);
 
         cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
-        Debug.Log($"highest level: {cummulatedHeights[0]} lowest level: {cummulatedHeights[cummulatedHeights.Count-1]}");
+        Debug.Log($"highest level: {cummulatedHeights[0]} lowest level: {cummulatedHeights[cummulatedHeights.Count - 1]}");
         cummulatedHeights.Clear();
     }
 
@@ -484,7 +499,7 @@ public class VoxelGenerator : MonoBehaviour
 
 
                             Vector3 cubepos = new Vector3(xblock, 1500, yblock);
-                            Vector3 cubescale = new Vector3(width, 512, width) - scale;
+                            Vector3 cubescale = new Vector3(width, 512, width);
                             Gizmos.DrawWireCube(cubepos, cubescale);
                             // Debug.Log($"blockpos: {cubepos} width: {width}");
 
@@ -557,8 +572,8 @@ public class VoxelGenerator : MonoBehaviour
         Debug.Log("rebuilding " + tilepos);
 
         //update mesh chunk per tile
-        InitializeHeightmap(tilepos.x, tilepos.y);
-        GenerateChunks(tiles[tilepos.x, tilepos.y].GetBlocks());
+        var heightmap = InitializeHeightmap(tilepos.x, tilepos.y);
+        GenerateChunks(tiles[tilepos.x, tilepos.y].GetBlocks(), heightmap);
 
         ////copy data to tile
         tiles[tilepos.x, tilepos.y].AddChunks(GetComponent<MeshGenerator>().CopyChunks());
@@ -635,7 +650,7 @@ public class VoxelGenerator : MonoBehaviour
         return blocksUpdated;
     }
 
-    void InitializeVoxelSize(int maxWidth, int voxelSize)
+    VoxelData[] InitializeVoxelSize(int maxWidth, int voxelSize)
     {
 
         // Calculate the number of voxels in each dimension
@@ -645,14 +660,14 @@ public class VoxelGenerator : MonoBehaviour
 
         // Initialize the voxelData array based on the calculated dimensions
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
-        voxelData = new VoxelData[totalVoxels];
-
+        VoxelData[] voxelData = new VoxelData[totalVoxels];
+        return voxelData;
         // Debug.Log($"voxels initialized {totalVoxels} xvoxels: {xVoxels + 1} yvoxels {yVoxels + 1} zvoxels {zVoxels + 1} maxwidth: {maxWidth}");
     }
 
-    void InitializeHeightmap(int x, int y)
+    Color[] InitializeHeightmap(int x, int y)
     {
-       
+
         string textureName = $"Textures\\heightmap_{x}_{y}";
         string WatertextureName = $"Textures\\WaterMask_{x}_{y}";
         // Debug.Log(textureName);
@@ -661,20 +676,18 @@ public class VoxelGenerator : MonoBehaviour
 
         if (heightmapTexture != null)
         {
-            heightMap = heightmapTexture.GetPixels();
             heightmapWidth = heightmapTexture.width;
-            //  Debug.Log(heightmapWidth);
+            return heightMap = heightmapTexture.GetPixels();
 
-            //set watermask
-            // WaterMap = waterMaskTexture.GetPixels();
         }
         else
         {
             Debug.LogError($"Heightmap texture '{textureName}' not found in Resources.");
+            return null;
         }
     }
 
-    private void GenerateVoxelStructure(int offsetX, int offsetZ, int voxelSize)
+    private void GenerateVoxelStructure(int offsetX, int offsetZ, int voxelSize, VoxelData[] voxelData)
     {
         int voxelWidth = xVoxels + 1;
         int voxelHeight = yVoxels + 1;
@@ -723,10 +736,10 @@ public class VoxelGenerator : MonoBehaviour
             float scaledHeight = sampledHeight * height;
 
             //if (water > 0)
-              //  cummulatedHeights.Add(sampledHeight);
+            //  cummulatedHeights.Add(sampledHeight);
 
-          //  voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
-            voxelData[_index].DistanceToSurface = y - scaledHeight ;
+            //  voxelData[_index].DistanceToSurface = (y * voxelSize) - scaledHeight;
+            voxelData[_index].DistanceToSurface = y - scaledHeight;
 
             if (y > highestlevel)
             {
@@ -742,7 +755,7 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log($"done filling data structure. highest level: {highestlevel}");
     }
 
-    private void DisplayVoxels(int voxelwidth, int voxelheight, int voxelSize)
+    private void DisplayVoxels(int voxelwidth, int voxelheight, int voxelSize, VoxelData[] voxelData)
     {
 
 
@@ -810,7 +823,7 @@ public class VoxelGenerator : MonoBehaviour
     //    Debug.DrawLine(vertices[3], vertices[7], color);
     //}
 
-    public float GetVoxelSample(Vector3 worldposition, int voxelSize)
+    public float GetVoxelSample(Vector3 worldposition, int voxelSize, VoxelData[] voxelData)
     {
         int x = Mathf.FloorToInt(worldposition.x / voxelSize);
         int y = Mathf.FloorToInt(worldposition.y / voxelSize);
@@ -831,15 +844,71 @@ public class VoxelGenerator : MonoBehaviour
         return voxelData[voxelIndex].DistanceToSurface;
     }
 
-    private void GenerateMesh(Vector2Int chunkpos, int maxChunkWidth, int voxelSize, int blockId)
+    private void GenerateMesh(Vector2Int chunkpos, int maxChunkWidth, int voxelSize, int blockId, VoxelData[] voxelData)
     {
         int voxelLength = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         Vector2 chunkSize = new Vector2(maxChunkWidth, height);
         Vector2Int offset = new Vector2Int(chunkpos.x, chunkpos.y);
 
         MeshGenerator generator = GetComponent<MeshGenerator>();
-        generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId);
+        generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData);
     }
 
+    #region Multithread jobs
+    [BurstCompile]
+    public struct GenerateVoxelStructure_Job : IJobParallelFor
+    {
+        [ReadOnly] public NativeArray<Color> heightMap;
+        public NativeArray<VoxelData> voxelData;
+        public int offsetX;
+        public int offsetZ;
+        public int voxelSize;
+        public int heightmapWidth;
+        public int height;
+        public int voxelWidth;
+        public int voxelHeight;
 
+        public void Execute(int index)
+        {
+            //get x & z coords
+            int z = index % voxelWidth;
+            int y = (index / voxelWidth) % voxelHeight;
+            int x = index / (voxelWidth * voxelHeight);
+
+            // Apply the x and z offsets here
+            int xOffset = offsetX;
+            int zOffset = offsetZ;
+
+            // Multiply the voxel positions by the voxel size first
+            x *= voxelSize;
+            z *= voxelSize;
+            y *= voxelSize;
+
+            // Apply offsets
+            x += xOffset;
+            z += zOffset;
+
+
+            //sample the height map
+            int voxelindex = (x * heightmapWidth) + z;
+
+            if (voxelindex >= heightMap.Length)
+            {
+
+                Debug.LogError($"x {x} y {y} z {z}");
+                Debug.Log($"offset: {offsetX}:{offsetZ}");
+                return;
+            }
+
+            Color sampledColor = heightMap[voxelindex];
+            float sampledHeight = sampledColor.r;
+            float scaledHeight = sampledHeight * height;
+
+            float dist = y - scaledHeight;
+            voxelData[index] = new VoxelData(dist, 0);
+
+        }
+    }
+
+    #endregion
 }
