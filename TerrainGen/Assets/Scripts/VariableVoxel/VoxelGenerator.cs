@@ -54,7 +54,7 @@ public class VoxelGenerator : MonoBehaviour
     private void Start()
     {
 
-
+        WorldData.TriangleTable_1D = WorldData.Convert2DTo1D(WorldData.TriangleTable);
 
         tiles = new TerrainTile[maxXTiles, maxZTiles];
 
@@ -92,7 +92,7 @@ public class VoxelGenerator : MonoBehaviour
 
 
                 //generate new tile
-              //  GenerateTile(xtile, ytile, blocks);
+                GenerateTile(xtile, ytile, blocks);
 
 
             }
@@ -134,7 +134,14 @@ public class VoxelGenerator : MonoBehaviour
         // Debug.Log($"tilepos: {tilepos}");
         int blockId = 0;
         NativeArray<Color> heightMap = new NativeArray<Color>(heightmap, allocator: Allocator.TempJob);
-       // NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(blocks.Count,allocator: Allocator.TempJob);
+        //initialize terrain data
+        WorldData.TerrainData terrainData = new WorldData.TerrainData
+        {
+            CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.TempJob),
+            EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.TempJob),
+            TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.TempJob),
+        };
+        // NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(blocks.Count,allocator: Allocator.TempJob);
         foreach (Block block in blocks)
         {
             //generate specific chunk level
@@ -172,14 +179,16 @@ public class VoxelGenerator : MonoBehaviour
             var data = InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
             Profiler.EndSample();
 
+
+
             Profiler.BeginSample("generating voxels");
-
-
             // Generate the voxel structure
-            // GenerateVoxelStructure(offsetY, offsetX, voxel_Size,data);
+            //  GenerateVoxelStructure(offsetY, offsetX, voxel_Size, data);
 
             //Generate voxel structure using job system
             NativeArray<VoxelData> voxelData = new NativeArray<VoxelData>(data, allocator: Allocator.TempJob);
+            NativeList<Vector3> vertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
+            NativeList<int> triangles = new NativeList<int>(allocator: Allocator.TempJob);
 
             GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
             {
@@ -193,9 +202,9 @@ public class VoxelGenerator : MonoBehaviour
                 voxelData = voxelData,
                 heightMap = heightMap,
             };
-            var jobhandle = voxelStructure_Job.Schedule(voxelData.Length, 64);
-           // jobs[blockId] = jobhandle;
-            jobhandle.Complete();
+            var job = voxelStructure_Job.Schedule(voxelData.Length, 64);
+
+
             Profiler.EndSample();
 
             // generate mesh
@@ -203,18 +212,46 @@ public class VoxelGenerator : MonoBehaviour
             // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
 
             Profiler.BeginSample("Generating mesh");
-          //  GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, voxelData.ToArray());
-           // GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, data);
+            var meshjobhandle = GenerateMesh_Jobified(chunkPos, chunkWidth, voxel_Size, blockId, voxelData, vertices, triangles, job,terrainData);
+            // GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, data);
+
+            JobHandle.CombineDependencies(job, meshjobhandle).Complete();
+            Profiler.EndSample();
+
+            Profiler.BeginSample("copying data");
+            // Copy data to regular lists
+            List<Vector3> newVerticesList = new List<Vector3>();
+            List<int> newTrianglesList = new List<int>();
+
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                newVerticesList.Add(vertices[i]);
+            }
+
+            for (int i = 0; i < triangles.Length; i++)
+            {
+                newTrianglesList.Add(triangles[i]);
+            }
+            Profiler.EndSample();
+
+            Profiler.BeginSample("finishing mesh");
+            GetComponent<MeshGenerator>().CreateMesh(chunkPos, blockId, newVerticesList, newTrianglesList);
 
             blockId++;
-            Profiler.EndSample();
 
 
             //dispose native arrays
             voxelData.Dispose();
+            triangles.Dispose();
+            vertices.Dispose();
+
+            Profiler.EndSample();
         }
-       // JobHandle.CompleteAll(jobs);
+        // JobHandle.CompleteAll(jobs);
         heightMap.Dispose();
+        terrainData.CornerTable.Dispose();
+        terrainData.EdgeIndexes.Dispose();
+        terrainData.TriangleTable.Dispose();
     }
 
     IEnumerator GenerateChunksAsync(object[] myparams)
@@ -599,7 +636,7 @@ public class VoxelGenerator : MonoBehaviour
 
     bool UpdateBlocks(int x, int y)
     {
-        Debug.Log("updating blocks");
+      
 
         if (x < 0 || y < 0 && x < maxXTiles - 1 && y < maxZTiles - 1)
         {
@@ -647,6 +684,7 @@ public class VoxelGenerator : MonoBehaviour
 
             i++;
         }
+        Debug.Log("updating blocks");
         return blocksUpdated;
     }
 
@@ -849,9 +887,26 @@ public class VoxelGenerator : MonoBehaviour
         int voxelLength = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         Vector2 chunkSize = new Vector2(maxChunkWidth, height);
         Vector2Int offset = new Vector2Int(chunkpos.x, chunkpos.y);
+        //WorldData.TerrainData terrainData = new WorldData.TerrainData()
+        //{
+        //    CornerTable = WorldData.CornerTable,
+        //    TriangleTable = WorldData.TriangleTable_1D,
+        //    EdgeIndexes = WorldData.EdgeIndexes_1D,
+        //};
+        MeshGenerator generator = GetComponent<MeshGenerator>();
+       // generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData, terrainData);
+
+    }
+
+    private JobHandle GenerateMesh_Jobified(Vector2Int chunkpos, int maxChunkWidth, int voxelSize, int blockId, NativeArray<VoxelData> voxelData, NativeList<Vector3> vertices, NativeList<int> triangles, JobHandle dependency,WorldData.TerrainData terrainData)
+    {
+        int voxelLength = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
+        Vector2 chunkSize = new Vector2(maxChunkWidth, height);
+        Vector2Int offset = new Vector2Int(chunkpos.x, chunkpos.y);
 
         MeshGenerator generator = GetComponent<MeshGenerator>();
-        generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData);
+        var handle = generator.GenerateMeshJobified(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData, vertices, triangles, dependency,terrainData);
+        return handle;
     }
 
     #region Multithread jobs

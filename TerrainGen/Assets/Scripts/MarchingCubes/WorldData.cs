@@ -52,6 +52,27 @@ public static class WorldData
         return scaledHeight;
     }
 
+    //convert triangle table to 1D array
+    public static int[] Convert2DTo1D(int[,] array2D)
+    {
+        int rows = array2D.GetLength(0);
+        int cols = array2D.GetLength(1);
+
+        int[] array1D = new int[rows * cols];
+        int index = 0;
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                array1D[index] = array2D[i, j];
+                index++;
+            }
+        }
+
+        return array1D;
+    }
+
     public static Vector3Int[] CornerTable = new Vector3Int[8] {
 
         new Vector3Int(0, 0, 0),
@@ -70,6 +91,11 @@ public static class WorldData
         {0, 1}, {1, 2}, {3, 2}, {0, 3}, {4, 5}, {5, 6}, {7, 6}, {4, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}
 
     };
+
+    public static int[] EdgeIndexes_1D = new int[]
+{
+    0, 1, 1, 2, 3, 2, 0, 3, 4, 5, 5, 6, 7, 6, 4, 7, 0, 4, 1, 5, 2, 6, 3, 7
+};
 
     public static int[,] TriangleTable = new int[,] {
 
@@ -332,6 +358,11 @@ public static class WorldData
 
     };
 
+    public static int[] TriangleTable_1D;
+
+
+
+
     public static void GenerateDistanceMap(Texture2D heightmap)
     {
         distanceMap = new float[heightmap.width, heightmap.height];
@@ -380,9 +411,24 @@ public static class WorldData
     public struct TerrainData
     {
 
-        public int[,] TriangleTable;
-        public int[,] EdgeIndexes;
-        public  Vector3Int[] CornerTable;
+        public NativeArray<int> TriangleTable;
+        // public int[] TriangleTable;
+        public NativeArray<int> EdgeIndexes;
+        //public int[] EdgeIndexes;
+        //  public Vector3Int[] CornerTable;
+        public NativeArray<Vector3Int> CornerTable;
+
+        public int GetTriangleTableValue(int x, int y)
+        {
+            // Assuming your 2D array is of size [height, TriangleTableWidth]
+            return TriangleTable[x * 16 + y];
+        }
+
+        public int GetEdgeIndexesValue(int x, int y)
+        {
+            // Assuming your 2D array is of size [height, EdgeIndexesWidth]
+            return EdgeIndexes[x * 2 + y];
+        }
     }
 }
 

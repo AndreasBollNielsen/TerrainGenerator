@@ -527,8 +527,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   height: 2000
   width: 128
-  maxXTiles: 1
-  maxZTiles: 1
+  maxXTiles: 7
+  maxZTiles: 7
   minVoxelSize: 4
   displayThreshold: -10
   startColor: {r: 0.066957, g: 1, b: 0, a: 0.7882353}

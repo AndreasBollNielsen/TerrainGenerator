@@ -1,11 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static WorldData;
 
 public class MeshGenerator : MonoBehaviour
 {
@@ -49,15 +51,48 @@ public class MeshGenerator : MonoBehaviour
 
     }
 
-    public void GenerateMeshJobified(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, NativeArray<VoxelData> voxelData)
+    public void CreateMesh(Vector2Int offset, int blockId, List<Vector3> vertices, List<int> triangles)
     {
-        //initialize terrain data
-        WorldData.TerrainData terrainData = new WorldData.TerrainData
-        {
-            CornerTable = WorldData.CornerTable,
-            EdgeIndexes = WorldData.EdgeIndexes,
-            TriangleTable = WorldData.TriangleTable,
-        };
+        //set mesh
+        Mesh mesh = new Mesh();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
+        //  mesh.colors = colors.ToArray();
+        mesh.RecalculateNormals();
+
+
+        //add mesh to gameobject
+        GameObject go = new GameObject();
+        go.AddComponent<MeshFilter>();
+        go.GetComponent<MeshFilter>().mesh = mesh;
+        go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        go.AddComponent<MeshRenderer>().material = material;
+        go.transform.position = new Vector3(offset.y, 0, offset.x);
+        go.name = $"chunk_{offset.y}_{offset.x}";
+
+        //create chunk object
+        Chunk_v chunk = new Chunk_v();
+        chunk.chunkObject = go;
+        chunk.mesh = mesh;
+        chunk.blockId = blockId;
+        //  chunk.CopyEdges(topEdge, bottomEdge, leftEdge, rightEdge);
+        chunks.Add(chunk);
+
+        //clear lists
+        triangles.Clear();
+        vertices.Clear();
+        //colors.Clear();
+
+        //topEdge.Clear();
+        //bottomEdge.Clear();
+        //leftEdge.Clear();
+        //rightEdge.Clear();
+    }
+
+    public JobHandle GenerateMeshJobified(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, NativeArray<VoxelData> voxelData, NativeList<Vector3> vertices, NativeList<int> triangles, JobHandle dependency, WorldData.TerrainData terrainData)
+    {
+
 
         MarchingCube_Job job = new MarchingCube_Job()
         {
@@ -72,24 +107,23 @@ public class MeshGenerator : MonoBehaviour
             voxelsLength = voxelsLength,
             surfaceDensity = WorldData.surfaceDensity,
             width = chunkSize.x,
+            triangles = triangles,
+            vertices = vertices,
 
         };
+
+        JobHandle handle = job.Schedule(voxelsLength, dependency);
+        return handle;
     }
 
-    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, VoxelData[] voxelData)
+    public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, VoxelData[] voxelData, WorldData.TerrainData terrainData)
     {
         float width = chunkSize.x;
         float height = chunkSize.y;
         //   Debug.Log($" height: {height} voxelwidth: {voxelWidth}");
         for (int index = 0; index < voxelsLength; index++)
         {
-
-
             // Convert the 1D index to 3D coordinates
-            //int x = index % voxelWidth;
-            //int y = (index / voxelWidth) % voxelHeight;
-            //int z = index / (voxelWidth * voxelHeight);
-
             int x = Mathf.FloorToInt(index % voxelWidth);
             int y = Mathf.FloorToInt((index / voxelWidth) % voxelHeight);
             int z = Mathf.FloorToInt(index / (voxelWidth * voxelHeight));
@@ -112,60 +146,13 @@ public class MeshGenerator : MonoBehaviour
 
             }
 
-
-
         }
 
-        //for (int i = 0; i < vertices.Count; i++)
-        //{
-        //    Color col = new Color(0.5f, 0.5f, 0.5f);
-        //    colors.Add(col);
-        //}
-
-        // Debug.Log($"topedge: {topEdge.Count} bottomedge: {bottomEdge.Count} leftedge: {leftEdge.Count} rightedge {rightEdge.Count} total vertices: {colors.Count}");
-
-        //test edge detection
-        //for (int i = 0; i < topEdge.Count; i++)
-        //{
-        //    Color col = Color.red;
-        //    int triangleIndex = topEdge[i];
-
-        //    if (triangleIndex < colors.Count)
-        //        colors[triangleIndex] = col;
-
-        //}
-
-        //for (int i = 0; i < bottomEdge.Count; i++)
-        //{
-        //    Color col = Color.green;
-        //    int triangleIndex = bottomEdge[i];
-
-        //    if (triangleIndex < colors.Count)
-        //        colors[triangleIndex] = col;
-
-        //}
-
-        //for (int i = 0; i < leftEdge.Count; i++)
-        //{
-        //    Color col = Color.blue;
-        //    int triangleIndex = leftEdge[i];
-
-        //    if (triangleIndex < colors.Count)
-        //        colors[triangleIndex] = col;
-
-        //}
-
-        //for (int i = 0; i < rightEdge.Count; i++)
-        //{
-        //    Color col = Color.yellow;
-        //    int triangleIndex = rightEdge[i];
-
-        //    if (triangleIndex < colors.Count)
-        //        colors[triangleIndex] = col;
-
-        //}
 
 
+
+
+        //set mesh
         Mesh mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices.ToArray();
@@ -174,7 +161,7 @@ public class MeshGenerator : MonoBehaviour
         mesh.RecalculateNormals();
 
 
-
+        //add mesh to gameobject
         GameObject go = new GameObject();
         go.AddComponent<MeshFilter>();
         go.GetComponent<MeshFilter>().mesh = mesh;
@@ -183,15 +170,15 @@ public class MeshGenerator : MonoBehaviour
         go.transform.position = new Vector3(offset.y, 0, offset.x);
         go.name = $"chunk_{offset.y}_{offset.x}";
 
-        // Debug.Log($"number of vertices: {vertices.Count} chunk: {go.name} voxelSize: {voxelSize}");
+        //create chunk object
         Chunk_v chunk = new Chunk_v();
         chunk.chunkObject = go;
         chunk.mesh = mesh;
         chunk.blockId = blockId;
-        chunk.CopyEdges(topEdge, bottomEdge, leftEdge, rightEdge);
-        // RemoveTrianglesAlongBorder(chunk.mesh, chunk.border);
+        //  chunk.CopyEdges(topEdge, bottomEdge, leftEdge, rightEdge);
         chunks.Add(chunk);
 
+        //clear lists
         triangles.Clear();
         vertices.Clear();
         colors.Clear();
@@ -212,10 +199,10 @@ public class MeshGenerator : MonoBehaviour
             for (int j = 0; j < 8; j++)
             {
                 //samples terrain data at neigboring cells
-                Vector3 worldpos = position + (WorldData.CornerTable[j] * voxelSize);
+                Vector3 worldpos = position + (terrainData.CornerTable[j] * voxelSize);
                 if (worldpos.z == 528)
                 {
-                    Debug.LogError($"worldpos: {position} corner: {WorldData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
+                    Debug.LogError($"worldpos: {position} corner: {terrainData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
                     //break;
                 }
                 cubes[j] = VoxelGenerator.GetVoxelSample(worldpos, voxelSize, voxelData);
@@ -236,7 +223,7 @@ public class MeshGenerator : MonoBehaviour
             {
                 for (int j = 0; j < 3; j++)
                 {
-                    int indice = WorldData.TriangleTable[configIndex, edgeIndex];
+                    int indice = terrainData.GetTriangleTableValue(configIndex, edgeIndex);
 
                     //return if end of indices
                     if (indice == -1)
@@ -245,14 +232,14 @@ public class MeshGenerator : MonoBehaviour
                     }
 
                     //get top and bottom of cube
-                    Vector3 vert1 = position + WorldData.CornerTable[WorldData.EdgeIndexes[indice, 0]] * voxelSize;
-                    Vector3 vert2 = position + WorldData.CornerTable[WorldData.EdgeIndexes[indice, 1]] * voxelSize;
+                    Vector3 vert1 = position + terrainData.CornerTable[terrainData.GetEdgeIndexesValue(indice, 0)] * voxelSize;
+                    Vector3 vert2 = position + terrainData.CornerTable[terrainData.GetEdgeIndexesValue(indice, 1)] * voxelSize;
 
                     Vector3 vertexPosition;
 
                     //get terrain values at either end of the edge
-                    float vert1Sample = cubes[WorldData.EdgeIndexes[indice, 0]];
-                    float vert2Sample = cubes[WorldData.EdgeIndexes[indice, 1]];
+                    float vert1Sample = cubes[terrainData.GetEdgeIndexesValue(indice, 0)];
+                    float vert2Sample = cubes[terrainData.GetEdgeIndexesValue(indice, 1)];
 
                     //calculate the difference between terrain values
                     float diff = vert2Sample - vert1Sample;
@@ -410,8 +397,8 @@ public class MeshGenerator : MonoBehaviour
         return chunks;
     }
 
-
-    public struct MarchingCube_Job : IJobParallelFor
+    [BurstCompile]
+    public struct MarchingCube_Job : IJobFor
     {
         public int voxelsLength;
         public int voxelWidth;
@@ -423,10 +410,15 @@ public class MeshGenerator : MonoBehaviour
         public int blockId;
         [ReadOnly]
         public NativeArray<VoxelData> voxelData;
+        [NativeDisableParallelForRestriction]
         public NativeList<Vector3> vertices;
+        [NativeDisableParallelForRestriction]
         public NativeList<int> triangles;
+        [ReadOnly]
         public WorldData.TerrainData TerrainData;
+        [ReadOnly]
         public float surfaceDensity;
+
 
         public void Execute(int index)
         {
@@ -461,9 +453,9 @@ public class MeshGenerator : MonoBehaviour
         void MarchCube(Vector3 position, int voxelSize, int width)
         {
 
-
             //sample terrain at each cube corner
-            float[] cubes = new float[8];
+            NativeArray<float> cubes = new NativeArray<float>(8,allocator: Allocator.Temp);
+           // float[] cubes = new float[8];
             for (int j = 0; j < 8; j++)
             {
                 //samples terrain data at neigboring cells
@@ -491,7 +483,7 @@ public class MeshGenerator : MonoBehaviour
             {
                 for (int j = 0; j < 3; j++)
                 {
-                    int indice = TerrainData.TriangleTable[configIndex, edgeIndex];
+                    int indice = TerrainData.GetTriangleTableValue(configIndex, edgeIndex);
 
                     //return if end of indices
                     if (indice == -1)
@@ -500,14 +492,14 @@ public class MeshGenerator : MonoBehaviour
                     }
 
                     //get top and bottom of cube
-                    Vector3 vert1 = position + TerrainData.CornerTable[TerrainData.EdgeIndexes[indice, 0]] * voxelSize;
-                    Vector3 vert2 = position + TerrainData.CornerTable[TerrainData.EdgeIndexes[indice, 1]] * voxelSize;
+                    Vector3 vert1 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 0)] * voxelSize;
+                    Vector3 vert2 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 1)] * voxelSize;
 
                     Vector3 vertexPosition;
 
                     //get terrain values at either end of the edge
-                    float vert1Sample = cubes[TerrainData.EdgeIndexes[indice, 0]];
-                    float vert2Sample = cubes[TerrainData.EdgeIndexes[indice, 1]];
+                    float vert1Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 0)];
+                    float vert2Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 1)];
 
                     //calculate the difference between terrain values
                     float diff = vert2Sample - vert1Sample;
@@ -529,6 +521,7 @@ public class MeshGenerator : MonoBehaviour
                     //add vertices and triangles
                     int vertIndex = VertForIndice(vertexPosition, position);
                     // DetectEges(vertexPosition, vertIndex);
+                    //  triangles.Add(vertIndex);
                     triangles.Add(vertIndex);
 
 
@@ -539,43 +532,10 @@ public class MeshGenerator : MonoBehaviour
 
 
 
-            //Color DetectEges(Vector3 vert, int vertIndex)
-            //{
-            //    Color color = Color.white;
-
-            //    //detect top edge
-            //    if (vert.z >= width)
-            //    {
-            //        topEdge.Add(vertIndex);
-            //        return Color.red;
-            //    }
-            //    //detect bottom edge
-            //    else if (vert.z == 0)
-            //    {
-            //        bottomEdge.Add(vertIndex);
-            //        return Color.red;
-            //    }
-            //    //detect left edge
-            //    else if (vert.x >= width)
-            //    {
-            //        leftEdge.Add(vertIndex);
-            //        return Color.red;
-            //    }
-            //    //detect right edge
-            //    else if (vert.x == 0)
-            //    {
-            //        rightEdge.Add(vertIndex);
-            //        return Color.red;
-            //    }
-
-
-            //    return color;
-
-
-            //}
 
 
 
+            cubes.Dispose();
         }
 
         int VertForIndice(Vector3 vert, Vector3 voxelPos)
@@ -592,30 +552,19 @@ public class MeshGenerator : MonoBehaviour
                 }
             }
 
-            Color color = Color.white;
-
-            //if (vert.z >= width-10)
-            //{
-            //    Debug.Log($"vert: {vert} width: {width}");
-            //}
 
 
 
-            //if (color == Color.red)
-            //{
-            //    vert = new Vector3(vert.x, vert.y - 10, vert.z);
-            //}
+
 
             // if it does not exist in list, add it to the list
             vertices.Add(vert);
-            //colors.Add(color);
-            // var colorIndex = WorldGenerator.Instance.terrainMap[WorldToVoxelIndex(voxelPos.x, voxelPos.y, voxelPos.z)].TexIndex;
-            // colors.Add(GetColorIndex(colorIndex));
+
 
             return vertices.Length - 1;
         }
 
-        int GetCubeConfiguration(float[] cube)
+        int GetCubeConfiguration(NativeArray<float> cube)
         {
             int configurationIndex = 0;
 
