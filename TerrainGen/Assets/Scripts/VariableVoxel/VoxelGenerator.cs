@@ -6,12 +6,13 @@ using TMPro;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
-using UnityEngine.UIElements;
-using static Unity.Collections.AllocatorManager;
-using static UnityEditor.PlayerSettings;
-using static UnityEngine.EventSystems.EventTrigger;
+//using UnityEngine.UIElements;
+//using static Unity.Collections.AllocatorManager;
+//using static UnityEditor.PlayerSettings;
+//using static UnityEngine.EventSystems.EventTrigger;
 
 
 public class VoxelGenerator : MonoBehaviour
@@ -32,7 +33,7 @@ public class VoxelGenerator : MonoBehaviour
     //VoxelData[] voxelData; // One-dimensional array to store voxel colors
     Color[] heightMap;
     // Color[] WaterMap;
-    int heightmapWidth;
+   
 
     // public Vector3 offset;
     //  public Vector3 scale;
@@ -48,13 +49,16 @@ public class VoxelGenerator : MonoBehaviour
     Vector3 lastpos;
     private int lastTileX;
     private int lastTileZ;
-
+    NativeArray<Color> CurrentheightMap;
     List<float> cummulatedHeights = new List<float>();
 
     private void Start()
     {
 
         WorldData.TriangleTable_1D = WorldData.Convert2DTo1D(WorldData.TriangleTable);
+        Constants.minChunkWidth = width;
+        Constants.minVoxelSize = minVoxelSize;
+        Constants.height = height;
 
         tiles = new TerrainTile[maxXTiles, maxZTiles];
 
@@ -69,8 +73,13 @@ public class VoxelGenerator : MonoBehaviour
         {
             for (int ytile = 0; ytile < maxZTiles; ytile++)
             {
-                var heightmap = InitializeHeightmap(xtile, ytile);
+                if(CurrentheightMap != null)
+                {
+                    CurrentheightMap.Dispose();
+                }
 
+                var heightmap = InitializeHeightmap(xtile, ytile);
+                CurrentheightMap = new NativeArray<Color>(heightmap, allocator: Allocator.Persistent);
 
 
 
@@ -82,8 +91,12 @@ public class VoxelGenerator : MonoBehaviour
                 //remove portion of the blocks
                 //  blocks.RemoveRange(4, ( blocks.Count-4));
 
+                //test 
+
+              //  MultithreadTest(blocks, heightmap);
+
                 //iterating each chunk inside a tile
-                GenerateChunks(blocks, heightmap);
+              //   GenerateChunks(blocks, heightmap);
 
                 //generate chunks async
                 //Vector2Int tilepos = new Vector2Int(xtile, ytile);
@@ -92,7 +105,7 @@ public class VoxelGenerator : MonoBehaviour
 
 
                 //generate new tile
-                GenerateTile(xtile, ytile, blocks);
+               //  GenerateTile(xtile, ytile, blocks);
 
 
             }
@@ -113,7 +126,7 @@ public class VoxelGenerator : MonoBehaviour
     void GenerateTile(int xtile, int ytile, List<Block> blocks)
     {
         //generate new tile
-        int tileSize = heightmapWidth - 1;
+        int tileSize = Constants.heightmapWidth - 1;
         TerrainTile tile = tiles[xtile, ytile];
         tile.AddBlocks(blocks);
         tile.AddChunks(GetComponent<MeshGenerator>().CopyChunks());
@@ -128,7 +141,52 @@ public class VoxelGenerator : MonoBehaviour
 
         var fps = FindObjectOfType<FPS_Controller>().enabled = true;
     }
+    void MultithreadTest(List<Block> blocks, Color[] heightmap)
+    {
 
+        NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(blocks.Count, allocator: Allocator.TempJob);
+        NativeArray<Color> heightMap = new NativeArray<Color>(heightmap, allocator: Allocator.TempJob);
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            //init nativearray
+            NativeArray<VoxelData> voxelData;
+            //  NativeList<Vector3> vertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
+            //  NativeList<int> triangles = new NativeList<int>(allocator: Allocator.TempJob);
+
+            Profiler.BeginSample("test_init");
+            //initialize voxelsize
+            int voxel_Size = Mathf.Clamp((blocks[i].Width / width) * minVoxelSize, 1, 256);
+           
+            voxelData = new NativeArray<VoxelData>(InitializeVoxelSize(blocks[i].Width + 1, voxel_Size), allocator: Allocator.TempJob);
+
+            int offsetX = (blocks[i].X - blocks[i].Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
+            int offsetY = (blocks[i].Y - blocks[i].Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
+            Profiler.EndSample();
+
+            Profiler.BeginSample("test_voxelize");
+            //generate voxel structure
+            GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
+            {
+                offsetX = offsetX,
+                offsetZ = offsetY,
+                voxelSize = voxel_Size,
+                heightmapWidth = Constants.heightmapWidth,
+                height = height,
+                voxelHeight = yVoxels + 1,
+                voxelWidth = xVoxels + 1,
+                voxelData = voxelData,
+                heightMap = heightMap,
+            };
+            jobs[i] = voxelStructure_Job.Schedule(voxelData.Length, 64);
+            Profiler.EndSample();
+            jobs[i].Complete();
+
+            voxelData.Dispose();
+        }
+      //  JobHandle.CompleteAll(jobs);
+        heightMap.Dispose();
+        jobs.Dispose();
+    }
     void GenerateChunks(List<Block> blocks, Color[] heightmap)
     {
         // Debug.Log($"tilepos: {tilepos}");
@@ -162,7 +220,7 @@ public class VoxelGenerator : MonoBehaviour
             int y = block.Y;
             int offsetX = x - (chunkWidth / 2);
             int offsetY = y - (chunkWidth / 2);
-            int tileWidth = heightmapWidth - 1;
+            int tileWidth = Constants.heightmapWidth - 1;
             block.Loaded = true;
 
 
@@ -195,7 +253,7 @@ public class VoxelGenerator : MonoBehaviour
                 offsetX = offsetY,
                 offsetZ = offsetX,
                 voxelSize = voxel_Size,
-                heightmapWidth = heightmapWidth,
+                heightmapWidth = Constants.heightmapWidth,
                 height = height,
                 voxelHeight = yVoxels + 1,
                 voxelWidth = xVoxels + 1,
@@ -212,7 +270,7 @@ public class VoxelGenerator : MonoBehaviour
             // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
 
             Profiler.BeginSample("Generating mesh");
-            var meshjobhandle = GenerateMesh_Jobified(chunkPos, chunkWidth, voxel_Size, blockId, voxelData, vertices, triangles, job,terrainData);
+            var meshjobhandle = GenerateMesh_Jobified(chunkPos, chunkWidth, voxel_Size, blockId, voxelData, vertices, triangles, job, terrainData);
             // GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, data);
 
             JobHandle.CombineDependencies(job, meshjobhandle).Complete();
@@ -254,66 +312,67 @@ public class VoxelGenerator : MonoBehaviour
         terrainData.TriangleTable.Dispose();
     }
 
-    IEnumerator GenerateChunksAsync(object[] myparams)
-    {
-        var blocks = (List<Block>)myparams[0];
-        Vector2Int tilepos = (Vector2Int)myparams[1];
-        int blockId = 0;
-        foreach (Block block in blocks)
-        {
-            if (block.Loaded)
-            {
-                blockId++;
-                continue;
-            }
+    //Deprecated
+    //IEnumerator GenerateChunksAsync(object[] myparams)
+    //{
+    //    var blocks = (List<Block>)myparams[0];
+    //    Vector2Int tilepos = (Vector2Int)myparams[1];
+    //    int blockId = 0;
+    //    foreach (Block block in blocks)
+    //    {
+    //        if (block.Loaded)
+    //        {
+    //            blockId++;
+    //            continue;
+    //        }
 
 
-            int chunkWidth = block.Width;
-            int x = block.X;
-            int y = block.Y;
-            int offsetX = x - (chunkWidth / 2);
-            int offsetY = y - (chunkWidth / 2);
-            int tileWidth = heightmapWidth - 1;
-            block.Loaded = true;
+    //        int chunkWidth = block.Width;
+    //        int x = block.X;
+    //        int y = block.Y;
+    //        int offsetX = x - (chunkWidth / 2);
+    //        int offsetY = y - (chunkWidth / 2);
+    //        int tileWidth = heightmapWidth - 1;
+    //        block.Loaded = true;
 
 
-            // Calculate the modulo to ensure that offsetX and offsetY are within the height map bounds
-            offsetX = (offsetX + tileWidth) % tileWidth;
-            offsetY = (offsetY + tileWidth) % tileWidth;
+    //        // Calculate the modulo to ensure that offsetX and offsetY are within the height map bounds
+    //        offsetX = (offsetX + tileWidth) % tileWidth;
+    //        offsetY = (offsetY + tileWidth) % tileWidth;
 
 
-            //calculate voxelsize based on chunkWidth
-            int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
-
-
-
-            //initialize voxelsize
-            var voxelData = InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
+    //        //calculate voxelsize based on chunkWidth
+    //        int voxel_Size = Mathf.Clamp((chunkWidth / width) * minVoxelSize, 1, 256);
 
 
 
-            // Generate the voxel structure
-            GenerateVoxelStructure(offsetY, offsetX, voxel_Size, voxelData);
+    //        //initialize voxelsize
+    //        var voxelData = InitializeVoxelSize(chunkWidth + 1, (int)voxel_Size);
 
 
 
-            // generate mesh
-            Vector2Int chunkPos = new Vector2Int(offsetY, offsetX);
-            // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
+    //        // Generate the voxel structure
+    //        GenerateVoxelStructure(offsetY, offsetX, voxel_Size, voxelData);
 
-            GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, voxelData);
 
-            blockId++;
-            yield return new WaitForEndOfFrame();
 
-        }
+    //        // generate mesh
+    //        Vector2Int chunkPos = new Vector2Int(offsetY, offsetX);
+    //        // Vector2Int tileposOffset = new Vector2Int(heightmapWidth * tilepos.x, heightmapWidth * tilepos.y);
 
-        GenerateTile(tilepos.x, tilepos.y, blocks);
+    //        GenerateMesh(chunkPos, chunkWidth, voxel_Size, blockId, voxelData);
 
-        cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
-        Debug.Log($"highest level: {cummulatedHeights[0]} lowest level: {cummulatedHeights[cummulatedHeights.Count - 1]}");
-        cummulatedHeights.Clear();
-    }
+    //        blockId++;
+    //        yield return new WaitForEndOfFrame();
+
+    //    }
+
+    //    GenerateTile(tilepos.x, tilepos.y, blocks);
+
+    //    cummulatedHeights.Sort((a, b) => -a.CompareTo(b));
+    //    Debug.Log($"highest level: {cummulatedHeights[0]} lowest level: {cummulatedHeights[cummulatedHeights.Count - 1]}");
+    //    cummulatedHeights.Clear();
+    //}
 
     List<Block> GenerateBlocks(int tileX, int tileY)
     {
@@ -328,12 +387,12 @@ public class VoxelGenerator : MonoBehaviour
         //divide if player is within tile
         if (dist < 3072)
         {
-            filledBlocks = DividePosition(tileCenter, 2048, 2048, 2, playerpos, 1);
+            filledBlocks = DividePosition(tileCenter, 2048, 2048, 2, playerpos);
 
         }
         else
         {
-            Block block = new Block(2048);
+            Block block = new Block(2048,new Vector2Int(tileX,tileY),CurrentheightMap);
             block.X = Mathf.RoundToInt(tileCenter.x);
             block.Y = Mathf.RoundToInt(tileCenter.y);
             filledBlocks.Add(block);
@@ -348,7 +407,7 @@ public class VoxelGenerator : MonoBehaviour
         return filledBlocks;
     }
 
-    List<Block> DividePosition(Vector2 center, float width, float height, int divisions, Vector2 playerpos, int level)
+    List<Block> DividePosition(Vector2 center, float width, float height, int divisions, Vector2 playerpos)
     {
         List<Block> tempblocks = new List<Block>();
 
@@ -358,8 +417,12 @@ public class VoxelGenerator : MonoBehaviour
 
         float centerX = center.x;
         float centerY = center.y;
-        int nextLevel = level + 1;
+       // int nextLevel = level + 1;
         bool ignoreplayer = false;
+
+        int tileX = Mathf.RoundToInt( (center.x / 2048) - 0.5f);
+        int tileY =Mathf.RoundToInt( (center.y / 2048) - 0.5f);
+
 
 
         //ignore distance calculation & fill remaining blocks
@@ -391,7 +454,7 @@ public class VoxelGenerator : MonoBehaviour
                 {
 
                     Vector2 pos = new Vector2(adjustedPosition.x, adjustedPosition.z);
-                    var blocks = DividePosition(pos, halfWidth, halfHeight, divisions, playerpos, nextLevel);
+                    var blocks = DividePosition(pos, halfWidth, halfHeight, divisions, playerpos);
                     tempblocks.AddRange(blocks);
 
                 }
@@ -416,7 +479,7 @@ public class VoxelGenerator : MonoBehaviour
         // Helper method to create a block based on a position and width
         Block CreateBlock(Vector3 position, float width)
         {
-            Block block = new Block((int)width);
+            Block block = new Block((int)width,new Vector2Int(tileX,tileY),CurrentheightMap);
             block.X = (int)position.x;
             block.Y = (int)position.z;
             return block;
@@ -636,7 +699,7 @@ public class VoxelGenerator : MonoBehaviour
 
     bool UpdateBlocks(int x, int y)
     {
-      
+        Profiler.BeginSample("updateBlocks");
 
         if (x < 0 || y < 0 && x < maxXTiles - 1 && y < maxZTiles - 1)
         {
@@ -651,6 +714,7 @@ public class VoxelGenerator : MonoBehaviour
 
         //compare & insert new blocks
         int i = 0;
+        int numblocks = 0;
         bool blocksUpdated = false;
         while (i < currentblocks.Count && i < newblocks.Count)
         {
@@ -666,6 +730,8 @@ public class VoxelGenerator : MonoBehaviour
                 currentblocks.RemoveRange(i, currentblocks.Count - i);
 
                 // Insert remaining elements from the newblocks list
+                var blocks = newblocks.GetRange(i, newblocks.Count - i);
+                numblocks = blocks.Count;
                 currentblocks.InsertRange(i, newblocks.GetRange(i, newblocks.Count - i));
 
                 // Call DestroyChunk on the old part of the list
@@ -684,7 +750,15 @@ public class VoxelGenerator : MonoBehaviour
 
             i++;
         }
-        Debug.Log("updating blocks");
+
+        if (numblocks > 0)
+        {
+            Debug.Log($"updating blocks {x}:{y} numblocks: {numblocks} update mesh?: {blocksUpdated}");
+
+        }
+
+        Profiler.EndSample();
+        // UnityEditor.EditorApplication.isPaused = true;
         return blocksUpdated;
     }
 
@@ -714,7 +788,7 @@ public class VoxelGenerator : MonoBehaviour
 
         if (heightmapTexture != null)
         {
-            heightmapWidth = heightmapTexture.width;
+            Constants.heightmapWidth = heightmapTexture.width;
             return heightMap = heightmapTexture.GetPixels();
 
         }
@@ -757,7 +831,7 @@ public class VoxelGenerator : MonoBehaviour
             // voxelData[_index].DistanceToSurface = (y * voxelSize) - (10.0f * perlinNoise);
 
             //sample the height map
-            int index = (x * heightmapWidth) + z;
+            int index = (x * Constants.heightmapWidth) + z;
 
             if (index >= heightMap.Length)
             {
@@ -874,7 +948,7 @@ public class VoxelGenerator : MonoBehaviour
         if (voxelIndex >= voxelData.Length)
         {
             Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
-            UnityEditor.EditorApplication.isPlaying = false;
+           // UnityEditor.EditorApplication.isPlaying = false;
 
 
             return -1;
@@ -894,18 +968,18 @@ public class VoxelGenerator : MonoBehaviour
         //    EdgeIndexes = WorldData.EdgeIndexes_1D,
         //};
         MeshGenerator generator = GetComponent<MeshGenerator>();
-       // generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData, terrainData);
+        // generator.GenerateMesh(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData, terrainData);
 
     }
 
-    private JobHandle GenerateMesh_Jobified(Vector2Int chunkpos, int maxChunkWidth, int voxelSize, int blockId, NativeArray<VoxelData> voxelData, NativeList<Vector3> vertices, NativeList<int> triangles, JobHandle dependency,WorldData.TerrainData terrainData)
+    private JobHandle GenerateMesh_Jobified(Vector2Int chunkpos, int maxChunkWidth, int voxelSize, int blockId, NativeArray<VoxelData> voxelData, NativeList<Vector3> vertices, NativeList<int> triangles, JobHandle dependency, WorldData.TerrainData terrainData)
     {
         int voxelLength = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         Vector2 chunkSize = new Vector2(maxChunkWidth, height);
         Vector2Int offset = new Vector2Int(chunkpos.x, chunkpos.y);
 
         MeshGenerator generator = GetComponent<MeshGenerator>();
-        var handle = generator.GenerateMeshJobified(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData, vertices, triangles, dependency,terrainData);
+        var handle = generator.GenerateMeshJobified(voxelLength, xVoxels, yVoxels, voxelSize, chunkSize, offset, blockId, voxelData, vertices, triangles, dependency, terrainData);
         return handle;
     }
 

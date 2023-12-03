@@ -594,7 +594,7 @@ public class MeshGenerator : MonoBehaviour
             if (voxelIndex >= voxelData.Length)
             {
                 Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
-                UnityEditor.EditorApplication.isPlaying = false;
+              //  UnityEditor.EditorApplication.isPlaying = false;
 
 
                 return -1;
