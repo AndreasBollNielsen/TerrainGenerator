@@ -1,12 +1,15 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static Block;
 using static WorldData;
 
 public class MeshGenerator : MonoBehaviour
@@ -98,8 +101,8 @@ public class MeshGenerator : MonoBehaviour
         {
 
             TerrainData = terrainData,
-            blockId = blockId,
-            voxelData = voxelData,
+            //blockId = blockId,
+            //  voxelData = voxelData,
             voxelSize = voxelSize,
             voxelWidth = voxelWidth,
             voxelHeight = voxelHeight,
@@ -407,9 +410,9 @@ public class MeshGenerator : MonoBehaviour
         public float width;
         public float height;
         public Vector2Int offset;
-        public int blockId;
+
         [ReadOnly]
-        public NativeArray<VoxelData> voxelData;
+        public NativeArray<VoxelData_v2> voxelData;
         [NativeDisableParallelForRestriction]
         public NativeList<Vector3> vertices;
         [NativeDisableParallelForRestriction]
@@ -446,7 +449,7 @@ public class MeshGenerator : MonoBehaviour
 
             }
 
-
+            
 
         }
 
@@ -454,8 +457,8 @@ public class MeshGenerator : MonoBehaviour
         {
 
             //sample terrain at each cube corner
-            NativeArray<float> cubes = new NativeArray<float>(8,allocator: Allocator.Temp);
-           // float[] cubes = new float[8];
+            NativeArray<half> cubes = new NativeArray<half>(8, allocator: Allocator.Temp);
+
             for (int j = 0; j < 8; j++)
             {
                 //samples terrain data at neigboring cells
@@ -564,7 +567,7 @@ public class MeshGenerator : MonoBehaviour
             return vertices.Length - 1;
         }
 
-        int GetCubeConfiguration(NativeArray<float> cube)
+        int GetCubeConfiguration(NativeArray<half> cube)
         {
             int configurationIndex = 0;
 
@@ -581,7 +584,7 @@ public class MeshGenerator : MonoBehaviour
         }
 
 
-        float GetVoxelSample(Vector3 worldposition, int voxelSize, NativeArray<VoxelData> voxelData)
+        half GetVoxelSample(Vector3 worldposition, int voxelSize, NativeArray<VoxelData_v2> voxelData)
         {
             int x = Mathf.FloorToInt(worldposition.x / voxelSize);
             int y = Mathf.FloorToInt(worldposition.y / voxelSize);
@@ -594,10 +597,10 @@ public class MeshGenerator : MonoBehaviour
             if (voxelIndex >= voxelData.Length)
             {
                 Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
-              //  UnityEditor.EditorApplication.isPlaying = false;
+                //  UnityEditor.EditorApplication.isPlaying = false;
 
 
-                return -1;
+                return (half)(-1.0f);
             }
             return voxelData[voxelIndex].DistanceToSurface;
         }
