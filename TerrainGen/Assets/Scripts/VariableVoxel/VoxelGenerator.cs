@@ -114,13 +114,14 @@ public class VoxelGenerator : MonoBehaviour
                 //NativeArray<Color> CurrentheightMap = new NativeArray<Color>(heightmap, allocator: Allocator.Persistent);
 
 
-
+                Debug.Log($"generating tile: {xtile}:{ytile}");
 
                 //generating blocks
                 Profiler.BeginSample("test_generating blocks");
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
+
 
                 NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.TempJob);
                 for (int i = 0; i < numblocks; i++)
@@ -131,6 +132,9 @@ public class VoxelGenerator : MonoBehaviour
 
                 }
                 JobHandle completeHandle = JobHandle.CombineDependencies(jobs);
+                JobHandle.ScheduleBatchedJobs();
+
+               
 
                 // Ensure that all jobs are completed before moving on
                 completeHandle.Complete();
@@ -148,17 +152,14 @@ public class VoxelGenerator : MonoBehaviour
                 if (completeHandle.IsCompleted)
                 {
                     //CurrentheightMap.Dispose();
-                    foreach (var heightmap in heightmaps)
-                    {
 
-                        heightmap.Dispose();
-                    }
                     jobs.Dispose();
 
                     //generate new tile
                     GenerateTile(xtile, ytile, blocks);
 
                     counter -= 1;
+                    UnityEditor.EditorApplication.isPaused = true;
                 }
 
                 //set size of current voxel structure - only for debugging
@@ -193,7 +194,10 @@ public class VoxelGenerator : MonoBehaviour
             terrainData.CornerTable.Dispose();
             terrainData.EdgeIndexes.Dispose();
             terrainData.TriangleTable.Dispose();
-
+            foreach (var heightmap in heightmaps)
+            {
+                heightmap.Dispose();
+            }
 
             Debug.Log($"disposed: {counter}");
         }
@@ -207,7 +211,7 @@ public class VoxelGenerator : MonoBehaviour
         {
             for (int y = 0; y < maxZTiles; y++)
             {
-                var heightmap = InitializeHeightmap(0, 0);
+                var heightmap = InitializeHeightmap(x, y);
                 NativeArray<float> currentMap = new NativeArray<float>(heightmap.Length, allocator: Allocator.Persistent);
                 for (int i = 0; i < heightmap.Length; i++)
                 {

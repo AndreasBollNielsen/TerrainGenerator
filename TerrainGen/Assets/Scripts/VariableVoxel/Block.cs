@@ -29,9 +29,9 @@ public class Block
     NativeArray<VoxelData_v2> voxelData;
     NativeList<Vector3> vertices;
     NativeList<int> triangles;
-    NativeArray<float> lowresHeightMap;
     VoxelData_v2[] tempVoxel;
     private int blockId;
+
     int offsetX;
     int offsetY;
     public Block(int _width, Vector2Int tilepos, int x, int y)
@@ -111,25 +111,13 @@ public class Block
         Profiler.BeginSample("test_initialize memory");
 
 
-        voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.TempJob);
+        voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
         vertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
         triangles = new NativeList<int>(allocator: Allocator.TempJob);
         //  lowresHeightMap = new NativeArray<float>(heightMap.Length, allocator: Allocator.TempJob);
 
         Profiler.EndSample();
-        // Profiler.BeginSample("test_convert heightmap");
 
-        //ConvertHeightMap convertHeightMapJob = new ConvertHeightMap()
-        //{
-
-        //    highresMap = heightMap,
-        //    lowresMap = lowresHeightMap
-
-        //};
-
-        //JobHandle heightmapConvertHandle = convertHeightMapJob.Schedule(heightMap.Length, 128);
-        //heightmapConvertHandle.Complete();
-        //  Profiler.EndSample();
 
         Profiler.BeginSample("test_generateVoxels");
         GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
@@ -144,9 +132,9 @@ public class Block
             voxelData = voxelData,
             heightMap = heightMap,
         };
-        var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 4);
+        var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
         voxeljob.Complete();
-        lowresHeightMap.Dispose();
+
 
         Profiler.EndSample();
 
@@ -173,19 +161,22 @@ public class Block
 
         };
         JobHandle meshhandle = Meshjob.Schedule(numThreads, 64, voxeljob);
+
+
+
+
         JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle);
-        // combinedJobs.Complete();
+
+
+        
+       // voxelData.Dispose();
         Profiler.EndSample();
 
         return combinedJobs;
 
     }
 
-    public void DisposeData()
-    {
-        voxelData.Dispose();
-    }
-
+   
     public void SetMesh()
     {
         // Debug.Log("set mesh");
@@ -259,8 +250,8 @@ public class Block
     {
 
         [ReadOnly] public NativeArray<float> heightMap;
-        // [NativeDisableParallelForRestriction]
-        [WriteOnly]
+       
+        [NativeDisableParallelForRestriction]
         public NativeArray<VoxelData_v2> voxelData;
         public int offsetX;
         public int offsetZ;
@@ -347,7 +338,7 @@ public class Block
         [ReadOnly]
         public float surfaceDensity;
         public int numThreads;
-
+       
         public void Execute(int index)
         {
             int chunkSize = voxelsLength / numThreads;
@@ -380,14 +371,13 @@ public class Block
                     // Debug.Log($"position: {voxelPosition}");
                     MarchCube(voxelPosition, voxelSize, (int)(width));
 
-
                 }
 
             }
 
 
 
-
+            
 
 
         }
@@ -553,7 +543,14 @@ public class Block
         }
     }
 
-
+    public struct DisposeData : IJob
+    {
+        public NativeArray<VoxelData_v2> data;
+        public void Execute()
+        {
+            data.Dispose();
+        }
+    }
     #endregion
 }
 
