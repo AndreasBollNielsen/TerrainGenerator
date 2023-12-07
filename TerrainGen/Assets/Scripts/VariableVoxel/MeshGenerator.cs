@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -115,7 +116,7 @@ public class MeshGenerator : MonoBehaviour
 
         };
 
-        JobHandle handle = job.Schedule(voxelsLength, dependency);
+        JobHandle handle = job.Schedule(voxelsLength,32, dependency);
         return handle;
     }
 
@@ -400,211 +401,7 @@ public class MeshGenerator : MonoBehaviour
         return chunks;
     }
 
-    [BurstCompile]
-    public struct MarchingCube_Job : IJobFor
-    {
-        public int voxelsLength;
-        public int voxelWidth;
-        public int voxelHeight;
-        public int voxelSize;
-        public float width;
-        public float height;
-        public Vector2Int offset;
-
-        [ReadOnly]
-        public NativeArray<VoxelData_v2> voxelData;
-        [NativeDisableParallelForRestriction]
-        public NativeList<Vector3> vertices;
-        [NativeDisableParallelForRestriction]
-        public NativeList<int> triangles;
-        [ReadOnly]
-        public WorldData.TerrainData TerrainData;
-        [ReadOnly]
-        public float surfaceDensity;
-
-
-        public void Execute(int index)
-        {
-
-
-            int x = Mathf.FloorToInt(index % voxelWidth);
-            int y = Mathf.FloorToInt((index / voxelWidth) % voxelHeight);
-            int z = Mathf.FloorToInt(index / (voxelWidth * voxelHeight));
-
-            // Calculate the position of the voxel in world space
-            Vector3 voxelPosition = new Vector3(
-                x * voxelSize,
-                y * voxelSize,
-                z * voxelSize
-            );
-
-
-
-
-            //use marchingcube algorithm to generate triangles and vertices
-            if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
-            {
-                // Debug.Log($"position: {voxelPosition}");
-                MarchCube(voxelPosition, voxelSize, (int)(width));
-
-            }
-
-            
-
-        }
-
-        void MarchCube(Vector3 position, int voxelSize, int width)
-        {
-
-            //sample terrain at each cube corner
-            NativeArray<half> cubes = new NativeArray<half>(8, allocator: Allocator.Temp);
-
-            for (int j = 0; j < 8; j++)
-            {
-                //samples terrain data at neigboring cells
-                Vector3 worldpos = position + (TerrainData.CornerTable[j] * voxelSize);
-                //if (worldpos.z == 528)
-                //{
-                //    Debug.LogError($"worldpos: {position} corner: {WorldData.CornerTable[j] * voxelSize} voxelSize: {voxelSize}");
-                //    //break;
-                //}
-                cubes[j] = GetVoxelSample(worldpos, voxelSize, voxelData);
-            }
-
-            //get configuration index of the cube
-            int configIndex = GetCubeConfiguration(cubes);
-
-
-            //if position is outside of cube
-            if (configIndex == 0 || configIndex == 255)
-            {
-                return;
-            }
-
-            int edgeIndex = 0;
-            for (int i = 0; i < 5; i++)
-            {
-                for (int j = 0; j < 3; j++)
-                {
-                    int indice = TerrainData.GetTriangleTableValue(configIndex, edgeIndex);
-
-                    //return if end of indices
-                    if (indice == -1)
-                    {
-                        return;
-                    }
-
-                    //get top and bottom of cube
-                    Vector3 vert1 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 0)] * voxelSize;
-                    Vector3 vert2 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 1)] * voxelSize;
-
-                    Vector3 vertexPosition;
-
-                    //get terrain values at either end of the edge
-                    float vert1Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 0)];
-                    float vert2Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 1)];
-
-                    //calculate the difference between terrain values
-                    float diff = vert2Sample - vert1Sample;
-
-                    //if difference is 0 terrain passes through the middle
-                    if (diff == 0)
-                    {
-                        diff = surfaceDensity;
-                    }
-                    else
-                    {
-                        diff = (surfaceDensity - vert1Sample) / diff;
-                    }
-
-                    //calculate the point along the edge that passes through
-                    vertexPosition = vert1 + ((vert2 - vert1) * diff);
-
-
-                    //add vertices and triangles
-                    int vertIndex = VertForIndice(vertexPosition, position);
-                    // DetectEges(vertexPosition, vertIndex);
-                    //  triangles.Add(vertIndex);
-                    triangles.Add(vertIndex);
-
-
-
-                    edgeIndex++;
-                }
-            }
-
-
-
-
-
-
-            cubes.Dispose();
-        }
-
-        int VertForIndice(Vector3 vert, Vector3 voxelPos)
-        {
-
-
-            //loop through the vertices
-            for (int i = 0; i < vertices.Length; i++)
-            {
-                //check if vertex already exists in the list. return it exists
-                if (vertices[i] == vert)
-                {
-                    return i;
-                }
-            }
-
-
-
-
-
-
-            // if it does not exist in list, add it to the list
-            vertices.Add(vert);
-
-
-            return vertices.Length - 1;
-        }
-
-        int GetCubeConfiguration(NativeArray<half> cube)
-        {
-            int configurationIndex = 0;
-
-            //iterate each corner
-            for (int i = 0; i < 8; i++)
-            {
-                if (cube[i] > surfaceDensity)
-                {
-                    //bitmask bool operation
-                    configurationIndex |= 1 << i;
-                }
-            }
-            return configurationIndex;
-        }
-
-
-        half GetVoxelSample(Vector3 worldposition, int voxelSize, NativeArray<VoxelData_v2> voxelData)
-        {
-            int x = Mathf.FloorToInt(worldposition.x / voxelSize);
-            int y = Mathf.FloorToInt(worldposition.y / voxelSize);
-            int z = Mathf.FloorToInt(worldposition.z / voxelSize);
-
-            int voxelsWidth = voxelWidth + 1;
-            int voxelsHeight = voxelHeight + 1;
-
-            int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
-            if (voxelIndex >= voxelData.Length)
-            {
-                Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
-                //  UnityEditor.EditorApplication.isPlaying = false;
-
-
-                return (half)(-1.0f);
-            }
-            return voxelData[voxelIndex].DistanceToSurface;
-        }
-    }
+    
 
 
 }

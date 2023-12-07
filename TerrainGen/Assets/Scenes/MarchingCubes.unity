@@ -526,10 +526,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   height: 2000
-  width: 128
-  maxXTiles: 1
+  width: 64
+  maxXTiles: 2
   maxZTiles: 1
-  minVoxelSize: 4
+  minVoxelSize: 2
   displayThreshold: -10
   startColor: {r: 0.066957, g: 1, b: 0, a: 0.7882353}
   endColor: {r: 1, g: 0, b: 0, a: 0}
