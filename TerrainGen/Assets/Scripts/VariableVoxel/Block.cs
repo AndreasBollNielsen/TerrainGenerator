@@ -1,21 +1,13 @@
-using Mono.Cecil;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Profiling;
-using static MeshGenerator;
-using static Unity.Collections.AllocatorManager;
-using static UnityEditor.Searcher.SearcherWindow.Alignment;
-using static VoxelGenerator;
 using static WorldData;
 
 public class Block
@@ -70,10 +62,10 @@ public class Block
 
             // Set the chunk reference to null to avoid further usage
             chunk = null;
-
+           // Debug.Log("removing chunk");
             return chunkGameObject;
         }
-
+        Debug.LogError("chunk reference missing");
         return null; // No chunk to destroy
     }
 
@@ -99,8 +91,9 @@ public class Block
         offsetY = (Y - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
 
         //initialize voxelsize
-        int voxel_Size = Mathf.Clamp((Width / Constants.minChunkWidth) * Constants.minVoxelSize, 1, 256);
-
+        float chunkWidth = (float)Width / Constants.minChunkWidth;
+        int voxel_Size = Mathf.RoundToInt( Mathf.Clamp(chunkWidth * Constants.minVoxelSize, 1, 256));
+       
         //Set voxelSize
         int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
         int yVoxels = Mathf.CeilToInt((float)Constants.height / voxel_Size);

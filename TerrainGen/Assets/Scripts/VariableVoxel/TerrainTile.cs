@@ -91,13 +91,6 @@ public class TerrainTile
         return blocks;
     }
 
-    //public List<Chunk_v> RemoveChunks()
-    //{
-    //    return meshChunks;
-    //}
-
-
-
     public GameObject GetTileObject()
     {
         if (tileObject != null)

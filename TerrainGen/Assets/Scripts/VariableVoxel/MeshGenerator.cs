@@ -4,12 +4,8 @@ using System.Linq;
 using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
-using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.UIElements;
 using static Block;
 using static WorldData;
 
