@@ -126,7 +126,7 @@ public class Block
             heightMap = heightMap,
         };
         var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
-        voxeljob.Complete();
+       // voxeljob.Complete();
 
 
         Profiler.EndSample();

@@ -2,16 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using System.Threading;
-using TMPro;
-using Unity.Burst;
 using Unity.Collections;
-using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
-using Unity.Mathematics;
-using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.Profiling;
 using static Block;
@@ -62,6 +54,8 @@ public class VoxelGenerator : MonoBehaviour
     int currentVoxelHeight;
     Vector3 currentVoxelPos;
 
+    JobHandle updatehandle;
+
     private void Start()
     {
         StartCoroutine(cacheHeightMaps());
@@ -79,7 +73,7 @@ public class VoxelGenerator : MonoBehaviour
 
         initTiles();
 
-
+        updatehandle = new JobHandle();
 
 
 
@@ -253,7 +247,13 @@ public class VoxelGenerator : MonoBehaviour
             lastTileZ = currentBlockZ;
         }
 
-
+        if(updatehandle != null)
+        {
+            if(updatehandle.IsCompleted)
+            {
+                Debug.Log("job finally done");
+            }
+        }
     }
     void InitializeWorld()
     {
@@ -570,13 +570,15 @@ public class VoxelGenerator : MonoBehaviour
         //update mesh chunk per tile
         var heightmap = InitializeHeightmap(tilepos.x, tilepos.y);
 
-
+        Profiler.BeginSample("test_converting Heightmap");
         NativeArray<float> currentMap = new NativeArray<float>(heightmap.Length, allocator: Allocator.Persistent);
         for (int i = 0; i < heightmap.Length; i++)
         {
             Color col = heightmap[i];
             currentMap[i] = col.r;
         }
+        Profiler.EndSample();
+
         var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
         int numLoaded = blocks.Count(x => x.Loaded == false);
         NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numLoaded, allocator: Allocator.TempJob);
@@ -593,6 +595,7 @@ public class VoxelGenerator : MonoBehaviour
 
         }
         JobHandle completeHandle = JobHandle.CombineDependencies(jobs);
+       // updatehandle = completeHandle;
         JobHandle.ScheduleBatchedJobs();
         // Ensure that all jobs are completed before moving on
         completeHandle.Complete();
