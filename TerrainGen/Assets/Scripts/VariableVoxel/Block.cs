@@ -23,7 +23,7 @@ public class Block
     NativeList<int> triangles;
     VoxelData_v2[] tempVoxel;
     private int blockId;
-
+    JobHandle combinedHandle;
     int offsetX;
     int offsetY;
     public Block(int _width, Vector2Int tilepos, int x, int y)
@@ -73,11 +73,109 @@ public class Block
     {
         return chunk;
     }
+
+    public JobHandle GetJob()
+    {
+        return combinedHandle;
+    }
+
     public void SetBlockId(int _blockId)
     {
         blockId = _blockId;
     }
-    public JobHandle GenerateMesh(NativeArray<float> heightMap, WorldData.TerrainData terrainData)
+
+    public IEnumerator testjob(object[] parameters)
+    {
+        NativeArray<float> heightMap = (NativeArray<float>)parameters[0];
+        WorldData.TerrainData terrainData = (WorldData.TerrainData)parameters[1];
+       
+        //calc offset
+        offsetX = (X - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
+        offsetY = (Y - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
+
+        //initialize voxelsize
+        float chunkWidth = (float)Width / Constants.minChunkWidth;
+        int voxel_Size = Mathf.RoundToInt(Mathf.Clamp(chunkWidth * Constants.minVoxelSize, 1, 256));
+
+        //Set voxelSize
+        int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
+        int yVoxels = Mathf.CeilToInt((float)Constants.height / voxel_Size);
+        int zVoxels = xVoxels;
+        int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
+
+
+
+
+        Profiler.BeginSample("test_initialize memory");
+        voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
+        vertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
+        triangles = new NativeList<int>(allocator: Allocator.TempJob);
+        Profiler.EndSample();
+        
+
+
+
+        Profiler.BeginSample("test_generateVoxels");
+        GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
+        {
+            offsetX = offsetY,
+            offsetZ = offsetX,
+            voxelSize = voxel_Size,
+            heightmapWidth = Constants.heightmapWidth,
+            height = Constants.height,
+            voxelHeight = yVoxels + 1,
+            voxelWidth = xVoxels + 1,
+            voxelData = voxelData,
+            heightMap = heightMap,
+        };
+        var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
+       
+        Profiler.EndSample();
+        
+
+
+
+       
+
+
+        Profiler.BeginSample("test_marchingcube");
+        int numThreads = 16;
+        MarchingCube_Job Meshjob = new MarchingCube_Job()
+        {
+            TerrainData = terrainData,
+            voxelData = voxelData,
+            voxelSize = voxel_Size,
+            voxelWidth = xVoxels,
+            voxelHeight = yVoxels,
+            height = Constants.height,
+            voxelsLength = totalVoxels,
+            surfaceDensity = WorldData.surfaceDensity,
+            width = Width,
+            triangles = triangles,
+            vertices = vertices,
+            numThreads = numThreads,
+
+        };
+        JobHandle meshhandle = Meshjob.Schedule(numThreads, 64, voxeljob);
+        JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle);
+        combinedHandle = combinedJobs;
+        Profiler.EndSample();
+
+
+        yield return combinedHandle;
+
+        combinedJobs.Complete();
+        SetMesh();
+        Loaded = true;
+       
+
+
+
+
+
+    }
+
+    public void GenerateMesh(NativeArray<float> heightMap, WorldData.TerrainData terrainData)
     {
 
         //if (X > 128 && Y > 128)
@@ -154,28 +252,28 @@ public class Block
 
         };
         JobHandle meshhandle = Meshjob.Schedule(numThreads, 64, voxeljob);
-
-
-
-
         JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle);
+        combinedHandle = combinedJobs;
+
+       // combinedJobs.Complete();
 
 
-        
+
+
+
        // voxelData.Dispose();
         Profiler.EndSample();
-
-        return combinedJobs;
+       
 
     }
 
    
     public void SetMesh()
     {
-        // Debug.Log("set mesh");
+       //  Debug.Log("set mesh");
         //set mesh
         Mesh mesh = new Mesh();
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt16;
         mesh.vertices = vertices.AsArray().ToArray();
         mesh.triangles = triangles.AsArray().ToArray();
         //  mesh.colors = colors.ToArray();
@@ -188,7 +286,7 @@ public class Block
         voxelData.Dispose();
         vertices.Dispose();
         triangles.Dispose();
-
+       
 
 
         //add mesh to gameobject
@@ -259,8 +357,7 @@ public class Block
         int xOffset;
         int zOffset;
         int voxelindex;
-        Color sampledColor;
-        int counter;
+      
         public void Execute(int index)
         {
 
@@ -301,7 +398,7 @@ public class Block
             float dist = y - scaledHeight;
             voxelData[index] = new VoxelData_v2((half)dist, 0);
 
-            counter++;
+           // counter++;
 
 
 
