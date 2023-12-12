@@ -50,6 +50,15 @@ public class Block
 
     }
 
+    public Block HideBlock()
+    {
+        if (chunk != null)
+        {
+            Block oldBlock = this;
+            return oldBlock;
+        }
+        return null;
+    }
     public GameObject DestroyChunk()
     {
         if (chunk != null)
@@ -65,7 +74,7 @@ public class Block
            // Debug.Log("removing chunk");
             return chunkGameObject;
         }
-        Debug.LogError("chunk reference missing");
+       // Debug.LogError("chunk reference missing");
         return null; // No chunk to destroy
     }
 
@@ -139,7 +148,7 @@ public class Block
 
 
         Profiler.BeginSample("test_marchingcube");
-        int numThreads = 16;
+        int numThreads = 8;
         MarchingCube_Job Meshjob = new MarchingCube_Job()
         {
             TerrainData = terrainData,
@@ -162,7 +171,7 @@ public class Block
         Profiler.EndSample();
 
 
-        yield return combinedHandle;
+        yield return new WaitForEndOfFrame();
 
         combinedJobs.Complete();
         SetMesh();
@@ -205,7 +214,7 @@ public class Block
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
         vertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
         triangles = new NativeList<int>(allocator: Allocator.TempJob);
-        //  lowresHeightMap = new NativeArray<float>(heightMap.Length, allocator: Allocator.TempJob);
+       
 
         Profiler.EndSample();
 
@@ -224,17 +233,15 @@ public class Block
             heightMap = heightMap,
         };
         var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
-       // voxeljob.Complete();
-
-
         Profiler.EndSample();
+       
 
-        //tempVoxel = new VoxelData_v2[totalVoxels];
-        //voxelData.CopyTo(tempVoxel);
+
+        
 
         Profiler.BeginSample("test_marchingcube");
 
-        int numThreads = 16;
+        int numThreads = 1;
         MarchingCube_Job Meshjob = new MarchingCube_Job()
         {
             TerrainData = terrainData,
@@ -261,7 +268,7 @@ public class Block
 
 
 
-       // voxelData.Dispose();
+      
         Profiler.EndSample();
        
 
@@ -454,7 +461,7 @@ public class Block
                     z * voxelSize
                 );
 
-                //  Debug.Log($"position: {voxelPosition}");
+                
                 //use marchingcube algorithm to generate triangles and vertices
                 if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
                 {
@@ -633,14 +640,7 @@ public class Block
         }
     }
 
-    public struct DisposeData : IJob
-    {
-        public NativeArray<VoxelData_v2> data;
-        public void Execute()
-        {
-            data.Dispose();
-        }
-    }
+   
     #endregion
 }
 

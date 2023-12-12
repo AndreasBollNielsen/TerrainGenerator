@@ -48,14 +48,15 @@ public class VoxelGenerator : MonoBehaviour
     Vector3 lastpos;
     private int lastTileX;
     private int lastTileZ;
-    NativeArray<Color> CurrentheightMap;
+
     List<NativeArray<float>> heightmaps = new List<NativeArray<float>>();
-    List<List<float>> ManagedHeightmaps = new List<List<float>>();
+    //List<List<float>> ManagedHeightmaps = new List<List<float>>();
+    Dictionary<Vector2Int, List<float>> ManagedHeightmaps = new Dictionary<Vector2Int, List<float>>();
     int currentVoxelWidth;
     int currentVoxelHeight;
     Vector3 currentVoxelPos;
+    List<Block> oldBlocks = new List<Block>();
 
-    
 
     private void Start()
     {
@@ -74,7 +75,7 @@ public class VoxelGenerator : MonoBehaviour
 
         initTiles();
 
-        
+
 
 
 
@@ -225,7 +226,7 @@ public class VoxelGenerator : MonoBehaviour
     private void Update()
     {
 
-        int currentBlockX = Mathf.RoundToInt(player.position.x / minChunkWidth); // Current tile X
+        int currentBlockX = Mathf.RoundToInt(player.position.x / minChunkWidth);
         int currentBlockZ = Mathf.RoundToInt(player.position.z / minChunkWidth);
 
         // Check if the player has moved to a new tile
@@ -238,7 +239,7 @@ public class VoxelGenerator : MonoBehaviour
                     //update blocks and recreate mesh if blocks has changed
                     if (UpdateBlocks(x, y))
                     {
-                        //  UpdateMesh(new Vector2Int(x, y));
+                        //   UpdateMesh(new Vector2Int(x, y));
                         StartCoroutine(UpdateMeshAsync(new Vector2Int(x, y)));
                     }
                 }
@@ -248,6 +249,11 @@ public class VoxelGenerator : MonoBehaviour
             lastTileZ = currentBlockZ;
         }
 
+        //quit application if escape is pushed
+        if (Input.GetKey(KeyCode.Escape))
+        {
+            Application.Quit();
+        }
 
     }
     IEnumerator InitializeWorld()
@@ -317,6 +323,7 @@ public class VoxelGenerator : MonoBehaviour
                 //dispose native data
                 yield return new WaitForEndOfFrame();
                 completeHandle.Complete();
+                Profiler.BeginSample("test_generatetile");
                 if (completeHandle.IsCompleted)
                 {
                     //CurrentheightMap.Dispose();
@@ -329,7 +336,7 @@ public class VoxelGenerator : MonoBehaviour
                     counter -= 1;
                     //  UnityEditor.EditorApplication.isPaused = true;
                 }
-
+                Profiler.EndSample();
                 //set size of current voxel structure - only for debugging
                 //CurrentvoxelData = blocks[0].GetVoxelData();
                 //currentVoxelHeight = Constants.height + 1;
@@ -359,15 +366,14 @@ public class VoxelGenerator : MonoBehaviour
 
         if (counter == 0)
         {
+            Profiler.BeginSample("test_dispose");
             terrainData.CornerTable.Dispose();
             terrainData.EdgeIndexes.Dispose();
             terrainData.TriangleTable.Dispose();
-            foreach (var heightmap in heightmaps)
-            {
-                ManagedHeightmaps.Add(heightmap.ToList());
-                heightmap.Dispose();
-            }
-            heightmaps.Clear();
+            Profiler.EndSample();
+            StartCoroutine(AddHeightMap());
+
+
 
             Debug.Log($"disposed: {counter}");
         }
@@ -377,8 +383,8 @@ public class VoxelGenerator : MonoBehaviour
     {
         int maxpercent = maxXTiles * maxZTiles;
         int percentage = 0;
-       
-      
+
+
         Color[] heightmap = new Color[2049 * 2049];
         for (int x = 0; x < maxXTiles; x++)
         {
@@ -390,7 +396,7 @@ public class VoxelGenerator : MonoBehaviour
                 {
                     Color col = heightmap[i];
                     currentMap[i] = col.r;
-                   
+
                 }
 
                 heightmaps.Add(currentMap);
@@ -401,16 +407,32 @@ public class VoxelGenerator : MonoBehaviour
 
             }
         }
-       Resources.UnloadUnusedAssets();
-       
-        int numElements =  (heightmap.Length * (maxXTiles * maxZTiles));
+        Resources.UnloadUnusedAssets();
+
+        int numElements = (heightmap.Length * (maxXTiles * maxZTiles));
         Constants.CalcMemory<float>(numElements);
         Debug.Log("Done Caching. total bytes: ");
 
         StartCoroutine(InitializeWorld());
     }
 
-   
+    IEnumerator AddHeightMap()
+    {
+      //  Profiler.BeginSample("test_adding heightmap");
+        int iterator = 0;
+        for (int x = 0; x < maxXTiles; x++)
+        {
+            for (int z = 0; z < maxZTiles; z++)
+            {
+                ManagedHeightmaps.Add(new Vector2Int(x, z), heightmaps[iterator].ToList());
+                heightmaps[iterator].Dispose();
+                iterator++;
+                yield return new WaitForEndOfFrame();
+            }
+        }
+        heightmaps.Clear();
+      //  Profiler.EndSample();
+    }
 
     void GenerateTile(int xtile, int ytile, List<Block> blocks)
     {
@@ -580,75 +602,88 @@ public class VoxelGenerator : MonoBehaviour
             EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
             TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
         };
-        var controller = player.transform.gameObject.GetComponent<FPS_Controller>();
-        controller.enabled = false;
-        //update mesh chunk per tile
-        // Profiler.BeginSample("test_converting Heightmap");
-        // var heightmap = InitializeHeightmap(tilepos.x, tilepos.y);
 
-        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[0].ToArray(), allocator: Allocator.Persistent);
-       // NativeArray<Color> highresMap = new NativeArray<Color>(heightmap, allocator: Allocator.Persistent);
-        //ConvertHeightMap RemapJob = new ConvertHeightMap
-        //{
-        //    highresMap = highresMap,
-        //    lowresMap = currentMap
-        //};
-        //var remapHandle = RemapJob.Schedule(currentMap.Length, 64);
-        //Profiler.EndSample();
-      
-        //remapHandle.Complete();
-        //highresMap.Dispose();
-        //for (int i = 0; i < heightmap.Length; i++)
-        //{
-        //    Color col = heightmap[i];
-        //    currentMap[i] = col.r;
-        //}
+
+
+        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
+
 
         var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
         int numLoaded = blocks.Count(x => x.Loaded == false);
-        int numpriority = blocks.Count(x => x.Width <= 64);
-        numpriority = numLoaded;
+        int numpriority = blocks.Count(x => x.Width < 64 && x.Loaded == false);
+        int numLowPriority = numLoaded - numpriority;
+        //  numpriority = numLoaded;
         object[] parameters = new object[2];
         parameters[0] = currentMap;
         parameters[1] = terrainData;
-       
 
-        NativeArray<JobHandle> priorityjobs = new NativeArray<JobHandle>(numpriority, allocator: Allocator.TempJob);
-       // Profiler.BeginSample("test_priorityjob");
-        int jobCounter = 0;
+        ScheduledBlock hightPriorityBlock = new ScheduledBlock(numpriority);
+        ScheduledBlock LowPriorityBlock = new ScheduledBlock(numLowPriority);
+
+        // Profiler.BeginSample("test_priorityjob");
+        int priorityCounter = 0;
+        int lowPriorityCounter = 0;
         for (int i = 0; i < blocks.Count; i++)
         {
-            if (!blocks[i].Loaded /*&& blocks[i].Width <= 64*/)
+            if (!blocks[i].Loaded)
             {
-                StartCoroutine(blocks[i].testjob(parameters));
-                // blocks[i].GenerateMesh(currentMap, terrainData);
-                priorityjobs[jobCounter] = blocks[i].GetJob();
-                jobCounter++;
+                //start high priority jobs
+                if (blocks[i].Width < 64)
+                {
+                    StartCoroutine(blocks[i].testjob(parameters));
+                    //blocks[i].GenerateMesh(currentMap, terrainData);
+
+                    hightPriorityBlock.blockIds.Add(i);
+                    hightPriorityBlock.jobHandles[priorityCounter] = blocks[i].GetJob();
+
+                   // yield return hightPriorityBlock.jobHandles[priorityCounter];
+                    priorityCounter++;
+                }
+                else
+                {
+                    StartCoroutine(blocks[i].testjob(parameters));
+                    LowPriorityBlock.blockIds.Add(i);
+                    LowPriorityBlock.jobHandles[lowPriorityCounter] = blocks[i].GetJob();
+
+                    lowPriorityCounter++;
+
+                }
             }
             blocks[i].SetBlockId(i);
 
 
         }
-        JobHandle completeHandle = JobHandle.CombineDependencies(priorityjobs);
-        // updatehandle = completeHandle;
-        //  JobHandle.ScheduleBatchedJobs();
-        // Ensure that all jobs are completed before moving on
+        JobHandle HighPriorityHandle = JobHandle.CombineDependencies(hightPriorityBlock.jobHandles);
+        JobHandle LowPriorityHandle = JobHandle.CombineDependencies(LowPriorityBlock.jobHandles);
+        JobHandle.ScheduleBatchedJobs();
+        Debug.Log($"priority: {priorityCounter}");
+        
 
-        yield return completeHandle;
-        completeHandle.Complete();
+         yield return HighPriorityHandle;
+        HighPriorityHandle.Complete();
 
-      //  Profiler.EndSample();
-     //   UnityEditor.EditorApplication.isPaused = true;
-        //for (int i = 0; i < blocks.Count; i++)
-        //{
-        //    if (!blocks[i].Loaded)
-        //    {
-        //        blocks[i].SetMesh();
-        //        blocks[i].Loaded = true;
-        //    }
-        //}
+        //  Profiler.EndSample();
+        //   UnityEditor.EditorApplication.isPaused = true;
+        for (int i = 0; i < hightPriorityBlock.blockIds.Count; i++)
+        {
+            int blockId = hightPriorityBlock.blockIds[i];
+            if (!blocks[blockId].Loaded)
+            {
+                blocks[blockId].SetMesh();
+                blocks[blockId].Loaded = true;
+            }
+        }
 
 
+        yield return LowPriorityHandle;
+        LowPriorityHandle.Complete();
+
+        foreach (var block in oldBlocks)
+        {
+
+            Destroy(block.DestroyChunk());
+        }
+        oldBlocks.Clear();
 
         var tileobject = tiles[tilepos.x, tilepos.y].GetTileObject();
         if (tileobject != null)
@@ -662,7 +697,10 @@ public class VoxelGenerator : MonoBehaviour
             Debug.Log($"tileobject at: {tilepos} is null");
         }
 
-        priorityjobs.Dispose();
+        hightPriorityBlock.jobHandles.Dispose();
+        hightPriorityBlock.blockIds.Clear();
+        LowPriorityBlock.jobHandles.Dispose();
+        LowPriorityBlock.blockIds.Clear();
         currentMap.Dispose();
         terrainData.CornerTable.Dispose();
         terrainData.EdgeIndexes.Dispose();
@@ -670,13 +708,13 @@ public class VoxelGenerator : MonoBehaviour
         // UnityEditor.EditorApplication.isPaused = true;
         Debug.Log("finished updating mesh");
 
-        controller.enabled = true;
+
 
 
     }
     private void UpdateMesh(Vector2Int tilepos)
     {
-        player.transform.position = new Vector3(player.transform.position.x, player.transform.position.y + 200f, player.transform.position.z);
+
 
         Debug.Log("rebuilding " + tilepos);
         WorldData.TerrainData terrainData = new WorldData.TerrainData
@@ -686,21 +724,18 @@ public class VoxelGenerator : MonoBehaviour
             TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
         };
 
-        //update mesh chunk per tile
-        var heightmap = InitializeHeightmap(tilepos.x, tilepos.y);
 
+
+        //update mesh chunk per tile
         Profiler.BeginSample("test_converting Heightmap");
-        NativeArray<float> currentMap = new NativeArray<float>(heightmap.Length, allocator: Allocator.Persistent);
-        for (int i = 0; i < heightmap.Length; i++)
-        {
-            Color col = heightmap[i];
-            currentMap[i] = col.r;
-        }
+        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
+
         Profiler.EndSample();
 
         var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
         int numLoaded = blocks.Count(x => x.Loaded == false);
         NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numLoaded, allocator: Allocator.Persistent);
+
         int jobCounter = 0;
         for (int i = 0; i < blocks.Count; i++)
         {
@@ -798,7 +833,8 @@ public class VoxelGenerator : MonoBehaviour
                 {
 
                     // Assuming DestroyChunk is a method in the Block class
-                    Destroy(block.DestroyChunk());
+                    //  Destroy(block.DestroyChunk());
+                    oldBlocks.Add(block.HideBlock());
                 }
                 blocksToRemove.Clear();
                 // Break out of the loop since we've handled the replacements
@@ -814,6 +850,8 @@ public class VoxelGenerator : MonoBehaviour
             Debug.Log($"updating blocks {x}:{y} numblocks: {numblocks} update mesh?: {blocksUpdated}");
 
         }
+
+
 
         Profiler.EndSample();
         // UnityEditor.EditorApplication.isPaused = true;
@@ -1178,4 +1216,16 @@ public class VoxelGenerator : MonoBehaviour
 
     #endregion
 
+}
+
+public class ScheduledBlock
+{
+    public List<int> blockIds;
+    public NativeArray<JobHandle> jobHandles;
+
+    public ScheduledBlock(int arraySize)
+    {
+        blockIds = new List<int>();
+        jobHandles = new NativeArray<JobHandle>(arraySize, allocator: Allocator.Persistent);
+    }
 }
