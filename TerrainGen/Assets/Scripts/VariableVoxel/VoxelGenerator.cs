@@ -275,8 +275,7 @@ public class VoxelGenerator : MonoBehaviour
             {
 
 
-                //var heightmap = InitializeHeightmap(xtile, ytile);
-                //NativeArray<Color> CurrentheightMap = new NativeArray<Color>(heightmap, allocator: Allocator.Persistent);
+               
 
 
                 // Debug.Log($"generating tile: {xtile}:{ytile}");
@@ -286,39 +285,26 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-
+               // numblocks = 1;
                 object[] parameters = new object[3];
                 parameters[0] = heightmaps[heightmapCounter];
                 parameters[1] = terrainData;
                 parameters[2] = new JobHandle();
 
-                NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.TempJob);
+                NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.Persistent);
                 for (int i = 0; i < numblocks; i++)
                 {
-                    // jobs[i] = blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                   //  blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                    blocks[i].testjob(parameters);
                     blocks[i].SetBlockId(i);
                     jobs[i] = blocks[i].GetJob();
-                    StartCoroutine(blocks[i].testjob(parameters));
                 }
                 JobHandle completeHandle = JobHandle.CombineDependencies(jobs);
                 //JobHandle.ScheduleBatchedJobs();
 
 
 
-                // Ensure that all jobs are completed before moving on
-                //   completeHandle.Complete();
-
-                //for (int j = 0; j < jobs.Length; j++)
-                //{
-                //    if (jobs[j].IsCompleted)
-                //    {
-                //        blocks[j].SetMesh();
-                //        blocks[j].Loaded = true;
-                //    }
-
-
-
-                //}
+                
 
                 //dispose native data
                 yield return new WaitForEndOfFrame();
@@ -331,10 +317,10 @@ public class VoxelGenerator : MonoBehaviour
                     jobs.Dispose();
 
                     //generate new tile
-                    GenerateTile(xtile, ytile, blocks);
+                  //  GenerateTile(xtile, ytile, blocks);
 
                     counter -= 1;
-                    //  UnityEditor.EditorApplication.isPaused = true;
+                      UnityEditor.EditorApplication.isPaused = true;
                 }
                 Profiler.EndSample();
                 //set size of current voxel structure - only for debugging
@@ -630,7 +616,7 @@ public class VoxelGenerator : MonoBehaviour
                 //start high priority jobs
                 if (blocks[i].Width < 64)
                 {
-                    StartCoroutine(blocks[i].testjob(parameters));
+                   // StartCoroutine(blocks[i].testjob(parameters));
                     //blocks[i].GenerateMesh(currentMap, terrainData);
 
                     hightPriorityBlock.blockIds.Add(i);
@@ -641,7 +627,7 @@ public class VoxelGenerator : MonoBehaviour
                 }
                 else
                 {
-                    StartCoroutine(blocks[i].testjob(parameters));
+                   // StartCoroutine(blocks[i].testjob(parameters));
                     LowPriorityBlock.blockIds.Add(i);
                     LowPriorityBlock.jobHandles[lowPriorityCounter] = blocks[i].GetJob();
 
@@ -655,28 +641,29 @@ public class VoxelGenerator : MonoBehaviour
         }
         JobHandle HighPriorityHandle = JobHandle.CombineDependencies(hightPriorityBlock.jobHandles);
         JobHandle LowPriorityHandle = JobHandle.CombineDependencies(LowPriorityBlock.jobHandles);
-        JobHandle.ScheduleBatchedJobs();
+        JobHandle combinedJobs = JobHandle.CombineDependencies(HighPriorityHandle, LowPriorityHandle);
+      //  JobHandle.ScheduleBatchedJobs();
         Debug.Log($"priority: {priorityCounter}");
         
 
-         yield return HighPriorityHandle;
-        HighPriorityHandle.Complete();
+         yield return combinedJobs;
+        combinedJobs.Complete();
 
         //  Profiler.EndSample();
         //   UnityEditor.EditorApplication.isPaused = true;
-        for (int i = 0; i < hightPriorityBlock.blockIds.Count; i++)
-        {
-            int blockId = hightPriorityBlock.blockIds[i];
-            if (!blocks[blockId].Loaded)
-            {
-                blocks[blockId].SetMesh();
-                blocks[blockId].Loaded = true;
-            }
-        }
+        //for (int i = 0; i < hightPriorityBlock.blockIds.Count; i++)
+        //{
+        //    int blockId = hightPriorityBlock.blockIds[i];
+        //    if (!blocks[blockId].Loaded)
+        //    {
+        //        blocks[blockId].SetMesh();
+        //        blocks[blockId].Loaded = true;
+        //    }
+        //}
 
 
-        yield return LowPriorityHandle;
-        LowPriorityHandle.Complete();
+     //   yield return LowPriorityHandle;
+      //  LowPriorityHandle.Complete();
 
         foreach (var block in oldBlocks)
         {
