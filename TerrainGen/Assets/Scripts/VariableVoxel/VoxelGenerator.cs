@@ -294,8 +294,8 @@ public class VoxelGenerator : MonoBehaviour
                 NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.Persistent);
                 for (int i = 0; i < numblocks; i++)
                 {
-                   //  blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
-                    blocks[i].testjob(parameters);
+                     blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                   // blocks[i].testjob(parameters);
                     blocks[i].SetBlockId(i);
                     jobs[i] = blocks[i].GetJob();
                 }
@@ -317,7 +317,7 @@ public class VoxelGenerator : MonoBehaviour
                     jobs.Dispose();
 
                     //generate new tile
-                  //  GenerateTile(xtile, ytile, blocks);
+                    GenerateTile(xtile, ytile, blocks);
 
                     counter -= 1;
                       UnityEditor.EditorApplication.isPaused = true;

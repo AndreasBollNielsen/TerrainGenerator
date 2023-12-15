@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -242,7 +243,7 @@ public class Block
         int yVoxels = Mathf.CeilToInt((float)Constants.height / voxel_Size);
         int zVoxels = xVoxels;
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
-
+        int totalVertices = (xVoxels * 3) * (zVoxels * 3);
 
         Profiler.BeginSample("test_initialize memory");
 
@@ -250,7 +251,7 @@ public class Block
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
         nativeVertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
         nativeTriangles = new NativeList<int>(allocator: Allocator.TempJob);
-
+        lookupTable = new NativeParallelMultiHashMap<Vector3, int>(totalVertices, allocator: Allocator.Persistent);
 
         Profiler.EndSample();
 
@@ -267,6 +268,7 @@ public class Block
             voxelWidth = xVoxels + 1,
             voxelData = voxelData,
             heightMap = heightMap,
+            
         };
         var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
         Profiler.EndSample();
@@ -277,7 +279,7 @@ public class Block
 
         Profiler.BeginSample("test_marchingcube");
 
-        int numThreads = 1;
+        int numThreads = 16;
         MarchingCube_Job Meshjob = new MarchingCube_Job()
         {
             TerrainData = terrainData,
@@ -292,15 +294,17 @@ public class Block
             triangles = nativeTriangles,
             vertices = nativeVertices,
             numThreads = numThreads,
+            lookup = lookupTable
+
 
         };
-        JobHandle meshhandle = Meshjob.Schedule(numThreads, 64, voxeljob);
+        JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 128, voxeljob);
         JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle);
         combinedHandle = combinedJobs;
 
-        // combinedJobs.Complete();
-
-
+         combinedJobs.Complete();
+        SetMesh();
+        Loaded =true;
 
 
 
@@ -314,37 +318,19 @@ public class Block
     public void SetMesh()
     {
 
-       // Profiler.BeginSample("test_calc triangles");
-
-        //Debug.Log("Triangle Array Length: " + triangles.Length);
-        //for (int i = 0; i < triangles.Length; i++)
-        //{
-        //    Debug.Log("Triangle " + i + ": " + triangles[i]);
-        //}
+      
+       
 
 
-      // Profiler.EndSample();
-        lookupTable.Dispose();
-
-
-        //  Debug.Log("set mesh");
+       
         //set mesh
         Mesh mesh = new Mesh();
-        //mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        //mesh.vertices = vertices.AsArray().ToArray();
-        //mesh.triangles = triangles.AsArray().ToArray();
-        //if (verts != null)
-        //{
-
-        //}
-        //else
-        //{
-        //    //mesh.vertices = vertices.AsArray().ToArray();
-        //    //mesh.triangles = triangles.AsArray().ToArray();
-
-        //}
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.vertices = nativeVertices.AsArray().ToArray();
+        mesh.triangles = nativeTriangles.AsArray().ToArray();
+       
         //  mesh.colors = colors.ToArray();
-        //  mesh.RecalculateNormals();
+          mesh.RecalculateNormals();
 
         Vector2Int offset = new Vector2Int(offsetX, offsetY);
 
@@ -353,7 +339,8 @@ public class Block
         nativeVertices.Dispose();
         nativeTriangles.Dispose();
         voxelData.Dispose();
-       // Debug.Log("nativedata disposed");
+        lookupTable.Dispose();
+        // Debug.Log("nativedata disposed");
         //Triangles.Dispose();
 
 
@@ -476,7 +463,7 @@ public class Block
     }
 
 
-    [BurstCompile]
+   // [BurstCompile]
     public struct MarchingCube_Job : IJobParallelFor
     {
         public int voxelsLength;
@@ -495,6 +482,8 @@ public class Block
         public NativeList<int> triangles;
         [ReadOnly]
         public WorldData.TerrainData TerrainData;
+        [NativeDisableParallelForRestriction]
+        public NativeParallelMultiHashMap<Vector3, int> lookup;
         [ReadOnly]
         public float surfaceDensity;
         public int numThreads;
@@ -510,33 +499,30 @@ public class Block
 
 
 
-            for (int i = startIndex; i < endIndex; i++)
+            //for (int i = startIndex; i < endIndex; i++)
+            //{
+            //}
+
+
+            int x = Mathf.FloorToInt(index % voxelWidth);
+            int y = Mathf.FloorToInt((index / voxelWidth) % voxelHeight);
+            int z = Mathf.FloorToInt(index / (voxelWidth * voxelHeight));
+
+            // Calculate the position of the voxel in world space
+            Vector3 voxelPosition = new Vector3(
+                x * voxelSize,
+                y * voxelSize,
+                z * voxelSize
+            );
+
+
+            //use marchingcube algorithm to generate triangles and vertices
+            if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
             {
-
-                int x = Mathf.FloorToInt(i % voxelWidth);
-                int y = Mathf.FloorToInt((i / voxelWidth) % voxelHeight);
-                int z = Mathf.FloorToInt(i / (voxelWidth * voxelHeight));
-
-                // Calculate the position of the voxel in world space
-                Vector3 voxelPosition = new Vector3(
-                    x * voxelSize,
-                    y * voxelSize,
-                    z * voxelSize
-                );
-
-
-                //use marchingcube algorithm to generate triangles and vertices
-                if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
-                {
-                    // Debug.Log($"position: {voxelPosition}");
-                    MarchCube(voxelPosition, voxelSize, (int)(width));
-
-                }
+                // Debug.Log($"position: {voxelPosition}");
+                MarchCube(voxelPosition, voxelSize, (int)(width));
 
             }
-
-
-
 
 
 
@@ -650,6 +636,28 @@ public class Block
 
 
             return vertices.Length - 1;
+
+
+            //NativeParallelMultiHashMapIterator<Vector3> iterator;
+
+            //if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
+            //{
+            //    do
+            //    {
+            //        // 'entryIndex' is the value associated with the key
+            //        // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
+            //        return entryIndex;
+            //    }
+            //    while (lookup.TryGetNextValue(out entryIndex, ref iterator));
+            //}
+
+            //// If it does not exist in the map, add it and return the new index
+            //int newIndex = vertices.Length;
+            //lookup.Add(vert, newIndex);
+            //vertices.Add(vert);
+
+            //return newIndex;
+
         }
 
         int GetCubeConfiguration(NativeArray<half> cube)
@@ -849,10 +857,15 @@ public class Block
                     //    triangles.Add(triangle);
                     //}
 
+                    ////add vertices and triangles
+                    //int vertIndex = VertForIndice(vertexPosition, position);
+                   // triangles.Add(1);
+
+
                     //add vertices and triangles
                     int vertIndex = VertForIndice(vertexPosition, position);
-                    triangles.Add(1);
-                   
+                    triangles.Add(vertIndex);
+
                     edgeIndex++;
                 }
 
