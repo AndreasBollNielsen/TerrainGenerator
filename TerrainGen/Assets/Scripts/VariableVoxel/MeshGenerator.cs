@@ -90,31 +90,31 @@ public class MeshGenerator : MonoBehaviour
         //rightEdge.Clear();
     }
 
-    public JobHandle GenerateMeshJobified(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, NativeArray<VoxelData> voxelData, NativeList<Vector3> vertices, NativeList<int> triangles, JobHandle dependency, WorldData.TerrainData terrainData)
-    {
+    //public JobHandle GenerateMeshJobified(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, NativeArray<VoxelData> voxelData, NativeList<Vector3> vertices, NativeList<int> triangles, JobHandle dependency, WorldData.TerrainData terrainData)
+    //{
 
 
-        MarchingCube_Job job = new MarchingCube_Job()
-        {
+    //    MarchingCube_Job job = new MarchingCube_Job()
+    //    {
 
-            TerrainData = terrainData,
-            //blockId = blockId,
-            //  voxelData = voxelData,
-            voxelSize = voxelSize,
-            voxelWidth = voxelWidth,
-            voxelHeight = voxelHeight,
-            height = chunkSize.y,
-            voxelsLength = voxelsLength,
-            surfaceDensity = WorldData.surfaceDensity,
-            width = chunkSize.x,
-            triangles = triangles,
-            vertices = vertices,
+    //        TerrainData = terrainData,
+    //        //blockId = blockId,
+    //        //  voxelData = voxelData,
+    //        voxelSize = voxelSize,
+    //        voxelWidth = voxelWidth,
+    //        voxelHeight = voxelHeight,
+    //        height = chunkSize.y,
+    //        voxelsLength = voxelsLength,
+    //        surfaceDensity = WorldData.surfaceDensity,
+    //        width = chunkSize.x,
+    //        triangles = triangles,
+    //        vertices = vertices,
 
-        };
+    //    };
 
-        JobHandle handle = job.Schedule(voxelsLength,32, dependency);
-        return handle;
-    }
+    //    JobHandle handle = job.Schedule(voxelsLength, dependency);
+    //    return handle;
+    //}
 
     public void GenerateMesh(int voxelsLength, int voxelWidth, int voxelHeight, int voxelSize, Vector2 chunkSize, Vector2Int offset, int blockId, VoxelData[] voxelData, WorldData.TerrainData terrainData)
     {

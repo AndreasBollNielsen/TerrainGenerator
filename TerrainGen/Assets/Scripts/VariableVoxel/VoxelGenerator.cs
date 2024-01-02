@@ -285,7 +285,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-               // numblocks = 1;
+               numblocks = 1;
                 object[] parameters = new object[3];
                 parameters[0] = heightmaps[heightmapCounter];
                 parameters[1] = terrainData;
@@ -300,7 +300,7 @@ public class VoxelGenerator : MonoBehaviour
                     jobs[i] = blocks[i].GetJob();
                 }
                 JobHandle completeHandle = JobHandle.CombineDependencies(jobs);
-                //JobHandle.ScheduleBatchedJobs();
+                JobHandle.ScheduleBatchedJobs();
 
 
 
@@ -317,7 +317,7 @@ public class VoxelGenerator : MonoBehaviour
                     jobs.Dispose();
 
                     //generate new tile
-                    GenerateTile(xtile, ytile, blocks);
+                  //  GenerateTile(xtile, ytile, blocks);
 
                     counter -= 1;
                       UnityEditor.EditorApplication.isPaused = true;
@@ -357,6 +357,7 @@ public class VoxelGenerator : MonoBehaviour
             terrainData.EdgeIndexes.Dispose();
             terrainData.TriangleTable.Dispose();
             Profiler.EndSample();
+            yield return new WaitForEndOfFrame();
             StartCoroutine(AddHeightMap());
 
 
@@ -398,7 +399,7 @@ public class VoxelGenerator : MonoBehaviour
         int numElements = (heightmap.Length * (maxXTiles * maxZTiles));
         Constants.CalcMemory<float>(numElements);
         Debug.Log("Done Caching. total bytes: ");
-
+        yield return new WaitForSeconds(3);
         StartCoroutine(InitializeWorld());
     }
 
@@ -617,7 +618,7 @@ public class VoxelGenerator : MonoBehaviour
                 if (blocks[i].Width < 64)
                 {
                    // StartCoroutine(blocks[i].testjob(parameters));
-                    //blocks[i].GenerateMesh(currentMap, terrainData);
+                    blocks[i].GenerateMesh(currentMap, terrainData);
 
                     hightPriorityBlock.blockIds.Add(i);
                     hightPriorityBlock.jobHandles[priorityCounter] = blocks[i].GetJob();
@@ -627,7 +628,8 @@ public class VoxelGenerator : MonoBehaviour
                 }
                 else
                 {
-                   // StartCoroutine(blocks[i].testjob(parameters));
+                    // StartCoroutine(blocks[i].testjob(parameters));
+                    blocks[i].GenerateMesh(currentMap, terrainData);
                     LowPriorityBlock.blockIds.Add(i);
                     LowPriorityBlock.jobHandles[lowPriorityCounter] = blocks[i].GetJob();
 

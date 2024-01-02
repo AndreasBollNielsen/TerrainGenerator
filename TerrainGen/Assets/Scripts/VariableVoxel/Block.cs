@@ -2,14 +2,18 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using Unity.Mathematics;
+using UnityEditor.Rendering.LookDev;
 using UnityEngine;
 using UnityEngine.Profiling;
+using UnityEngine.UIElements;
 using static Block;
+using static UnityEditor.Searcher.SearcherWindow.Alignment;
 using static WorldData;
 
 public class Block
@@ -205,10 +209,10 @@ public class Block
         combinedHandle = combinedJobs;
 
 
-      //  yield return combinedHandle;
+        //  yield return combinedHandle;
         combinedHandle.Complete();
 
-      
+
 
         //  UnityEditor.EditorApplication.isPaused = true;
         SetMesh();
@@ -240,8 +244,34 @@ public class Block
 
         //Set voxelSize
         int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
-        int yVoxels = Mathf.CeilToInt((float)Constants.height / voxel_Size);
         int zVoxels = xVoxels;
+
+        Profiler.BeginSample("test_heightCalc");
+        //quick job to calculate max voxel height
+        NativeArray<float> heightResult = new NativeArray<float>(1, allocator: Allocator.TempJob);
+        CalculateHeightJob heightJob = new CalculateHeightJob()
+        {
+            heightMap = heightMap,
+            ResultHeight = heightResult,
+            heightmapWidth = Constants.heightmapWidth,
+            offsetX = offsetY,
+            offsetZ = offsetX,
+            height = Constants.height,
+            voxelWidth = xVoxels,
+            voxelSize = voxel_Size,
+
+
+        };
+        JobHandle deps = new JobHandle();
+        JobHandle heightHandle = heightJob.Schedule(Width * Width, deps);
+        heightHandle.Complete();
+
+        float maxHeight = heightResult[0] + 16;
+        heightResult.Dispose();
+        Profiler.EndSample();
+
+        //set total voxel size
+        int yVoxels = Mathf.CeilToInt((maxHeight + 1) / voxel_Size);
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
         int totalVertices = (xVoxels * 3) * (zVoxels * 3);
 
@@ -249,8 +279,9 @@ public class Block
 
 
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
-        nativeVertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
-        nativeTriangles = new NativeList<int>(allocator: Allocator.TempJob);
+        nativeVertices = new NativeList<Vector3>(1800, allocator: Allocator.TempJob);
+        NativeList<Vector3> TempVertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
+        nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
         lookupTable = new NativeParallelMultiHashMap<Vector3, int>(totalVertices, allocator: Allocator.Persistent);
 
         Profiler.EndSample();
@@ -268,7 +299,7 @@ public class Block
             voxelWidth = xVoxels + 1,
             voxelData = voxelData,
             heightMap = heightMap,
-            
+
         };
         var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
         Profiler.EndSample();
@@ -279,7 +310,7 @@ public class Block
 
         Profiler.BeginSample("test_marchingcube");
 
-        int numThreads = 16;
+        int numThreads = 8;
         MarchingCube_Job Meshjob = new MarchingCube_Job()
         {
             TerrainData = terrainData,
@@ -291,25 +322,44 @@ public class Block
             voxelsLength = totalVoxels,
             surfaceDensity = WorldData.surfaceDensity,
             width = Width,
-            triangles = nativeTriangles,
-            vertices = nativeVertices,
+            // triangles = nativeTriangles,
+            vertices = TempVertices,
             numThreads = numThreads,
-            lookup = lookupTable
+            lookup = lookupTable,
 
 
         };
-        JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 128, voxeljob);
-        JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle);
+
+        JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 64, voxeljob);
+        meshhandle.Complete();
+        Debug.Log($"lookup table {lookupTable.Count()} vertices {TempVertices.Length}");
+        Profiler.EndSample();
+
+        Profiler.BeginSample("test_vertexprocess");
+
+        int numTriplets = TempVertices.Length / 3;
+        ProcessVertices vertexJob = new ProcessVertices()
+        {
+            Tempvertices = TempVertices,
+            triangles = nativeTriangles.AsParallelWriter(),
+            //vertices = nativeVertices.AsParallelWriter(),
+            lookup = lookupTable
+        };
+
+        JobHandle vertexHandle = vertexJob.Schedule(6, 64, meshhandle);
+        Profiler.EndSample();
+        JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle, vertexHandle);
         combinedHandle = combinedJobs;
 
-         combinedJobs.Complete();
+        combinedJobs.Complete();
+        nativeVertices.CopyFrom(TempVertices);
+        TempVertices.Dispose();
         SetMesh();
-        Loaded =true;
+        Loaded = true;
 
 
 
 
-        Profiler.EndSample();
 
 
     }
@@ -318,19 +368,19 @@ public class Block
     public void SetMesh()
     {
 
-      
-       
 
 
-       
+
+
+
         //set mesh
         Mesh mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = nativeVertices.AsArray().ToArray();
         mesh.triangles = nativeTriangles.AsArray().ToArray();
-       
+
         //  mesh.colors = colors.ToArray();
-          mesh.RecalculateNormals();
+        mesh.RecalculateNormals();
 
         Vector2Int offset = new Vector2Int(offsetX, offsetY);
 
@@ -463,7 +513,7 @@ public class Block
     }
 
 
-   // [BurstCompile]
+    [BurstCompile]
     public struct MarchingCube_Job : IJobParallelFor
     {
         public int voxelsLength;
@@ -479,7 +529,7 @@ public class Block
         [NativeDisableParallelForRestriction]
         public NativeList<Vector3> vertices;
         [NativeDisableParallelForRestriction]
-        public NativeList<int> triangles;
+        // public NativeList<int> triangles;
         [ReadOnly]
         public WorldData.TerrainData TerrainData;
         [NativeDisableParallelForRestriction]
@@ -490,18 +540,18 @@ public class Block
 
         public void Execute(int index)
         {
-            int chunkSize = voxelsLength / numThreads;
-            int startIndex = index * chunkSize;
-            int endIndex = math.min(startIndex + chunkSize, voxelsLength);
+            //int chunkSize = voxelsLength / numThreads;
+            //int startIndex = iterator * chunkSize;
+            //int endIndex = math.min(startIndex + chunkSize, voxelsLength);
 
 
             // Debug.Log($"start; {startIndex} end: {endIndex}");
 
-
-
-            //for (int i = startIndex; i < endIndex; i++)
+            //for (int index = startIndex; index < endIndex; index++)
             //{
+
             //}
+
 
 
             int x = Mathf.FloorToInt(index % voxelWidth);
@@ -532,18 +582,38 @@ public class Block
         {
 
             //sample terrain at each cube corner
-            NativeArray<half> cubes = new NativeArray<half>(8, allocator: Allocator.Temp);
+            //NativeArray<half> cubes = new NativeArray<half>(8, allocator: Allocator.Temp);
 
+            //for (int j = 0; j < 8; j++)
+            //{
+            //    //samples terrain data at neigboring cells
+            //    Vector3 worldpos = position + (TerrainData.CornerTable[j] * voxelSize);
+            //    cubes[j] = GetVoxelSample(worldpos, voxelSize, voxelData);
+
+            //}
+
+            ////get configuration index of the cube
+            //int configIndex = GetCubeConfiguration(cubes);
+
+
+            int configIndex = 0;
+            Vector3 worldPos;
             for (int j = 0; j < 8; j++)
             {
-                //samples terrain data at neigboring cells
-                Vector3 worldpos = position + (TerrainData.CornerTable[j] * voxelSize);
-                cubes[j] = GetVoxelSample(worldpos, voxelSize, voxelData);
+                //samples terrain data at neighboring cells
+                worldPos = position + (TerrainData.CornerTable[j] * voxelSize);
+                half voxelSample = GetVoxelSample(worldPos, voxelSize);
 
+                // Update configuration index using bitmask bool operation
+                if (voxelSample > surfaceDensity)
+                {
+                    configIndex |= 1 << j;
+                }
             }
 
-            //get configuration index of the cube
-            int configIndex = GetCubeConfiguration(cubes);
+
+
+
 
 
             //if position is outside of cube
@@ -553,12 +623,21 @@ public class Block
                 return;
             }
 
+
             int edgeIndex = 0;
+            int indice = 0;
+            Vector3 vert1;
+            Vector3 vert2;
+            Vector3 vertexPosition;
+            float vert1Sample;
+            float vert2Sample;
+            float diff;
+
             for (int i = 0; i < 5; i++)
             {
                 for (int j = 0; j < 3; j++)
                 {
-                    int indice = TerrainData.GetTriangleTableValue(configIndex, edgeIndex);
+                    indice = TerrainData.GetTriangleTableValue(configIndex, edgeIndex);
                     // Debug.Log(indice);
                     //return if end of indices
                     if (indice == -1)
@@ -567,17 +646,21 @@ public class Block
                     }
 
                     //get top and bottom of cube
-                    Vector3 vert1 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 0)] * voxelSize;
-                    Vector3 vert2 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 1)] * voxelSize;
+                    vert1 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 0)] * voxelSize;
+                    vert2 = position + TerrainData.CornerTable[TerrainData.GetEdgeIndexesValue(indice, 1)] * voxelSize;
 
-                    Vector3 vertexPosition;
+                    //  Vector3 vertexPosition;
 
                     //get terrain values at either end of the edge
-                    float vert1Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 0)];
-                    float vert2Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 1)];
+                    //float vert1Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 0)];
+                    //float vert2Sample = cubes[TerrainData.GetEdgeIndexesValue(indice, 1)];
+
+                    //get terrain values at either end of the edge
+                    vert1Sample = GetVoxelSample(vert1, voxelSize);
+                    vert2Sample = GetVoxelSample(vert2, voxelSize);
 
                     //calculate the difference between terrain values
-                    float diff = vert2Sample - vert1Sample;
+                    diff = vert2Sample - vert1Sample;
 
                     //if difference is 0 terrain passes through the middle
                     if (diff == 0)
@@ -594,11 +677,20 @@ public class Block
 
 
                     //add vertices and triangles
-                    int vertIndex = VertForIndice(vertexPosition, position);
-                    triangles.Add(vertIndex);
+                    // int vertIndex = VertForIndice(vertexPosition, position);
+                    //triangles.Add(vertIndex);
 
+                    bool check = checkUnique(vertexPosition);
 
+                    //int newIndex = vertices.Length;
+                    //lookup.Add(vertexPosition, newIndex);
+                    //vertices.Add(vertexPosition);
 
+                    if (check)
+                    {
+                        vertices.Add(vertexPosition);
+
+                    }
 
                     edgeIndex++;
                 }
@@ -609,22 +701,39 @@ public class Block
 
 
 
-            cubes.Dispose();
+            // cubes.Dispose();
         }
+        bool checkUnique(Vector3 vert)
+        {
+            NativeParallelMultiHashMapIterator<Vector3> iterator;
 
+            if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
+            {
+                do
+                {
+                    // 'entryIndex' is the value associated with the key
+                    // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
+                    return true;
+                }
+                while (lookup.TryGetNextValue(out entryIndex, ref iterator));
+            }
+            int newIndex = vertices.Length;
+            lookup.Add(vert, newIndex);
+            return false;
+        }
         int VertForIndice(Vector3 vert, Vector3 voxelPos)
         {
 
 
             //loop through the vertices
-            for (int i = 0; i < vertices.Length; i++)
-            {
-                //check if vertex already exists in the list. return it exists
-                if (vertices[i] == vert)
-                {
-                    return i;
-                }
-            }
+            //for (int i = 0; i < vertices.Length; i++)
+            //{
+            //    //check if vertex already exists in the list. return it exists
+            //    if (vertices[i] == vert)
+            //    {
+            //        return i;
+            //    }
+            //}
 
 
 
@@ -632,32 +741,32 @@ public class Block
             //  Debug.Log("adding vert");
 
             // if it does not exist in list, add it to the list
+            //   vertices.Add(vert);
+
+
+            // return vertices.Length - 1;
+
+
+            NativeParallelMultiHashMapIterator<Vector3> iterator;
+
+            if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
+            {
+                do
+                {
+                    // 'entryIndex' is the value associated with the key
+                    // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
+                    return entryIndex;
+                }
+                while (lookup.TryGetNextValue(out entryIndex, ref iterator));
+            }
+
+            // If it does not exist in the map, add it and return the new index
+            int newIndex = vertices.Length;
+            lookup.Add(vert, newIndex);
             vertices.Add(vert);
 
 
-            return vertices.Length - 1;
-
-
-            //NativeParallelMultiHashMapIterator<Vector3> iterator;
-
-            //if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
-            //{
-            //    do
-            //    {
-            //        // 'entryIndex' is the value associated with the key
-            //        // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
-            //        return entryIndex;
-            //    }
-            //    while (lookup.TryGetNextValue(out entryIndex, ref iterator));
-            //}
-
-            //// If it does not exist in the map, add it and return the new index
-            //int newIndex = vertices.Length;
-            //lookup.Add(vert, newIndex);
-            //vertices.Add(vert);
-
-            //return newIndex;
-
+            return newIndex;
         }
 
         int GetCubeConfiguration(NativeArray<half> cube)
@@ -677,7 +786,7 @@ public class Block
         }
 
 
-        half GetVoxelSample(Vector3 worldposition, int voxelSize, NativeArray<VoxelData_v2> voxelData)
+        half GetVoxelSample(Vector3 worldposition, int voxelSize/*, NativeArray<VoxelData_v2> voxelData*/)
         {
             int x = Mathf.FloorToInt(worldposition.x / voxelSize);
             int y = Mathf.FloorToInt(worldposition.y / voxelSize);
@@ -695,11 +804,95 @@ public class Block
 
                 return (half)(-1.0f);
             }
+            // return voxelData[voxelIndex].DistanceToSurface;
             return voxelData[voxelIndex].DistanceToSurface;
         }
     }
 
-   // [BurstCompile]
+    public struct ProcessVertices : IJobParallelFor
+    {
+        [NativeDisableParallelForRestriction]
+       // public NativeList<Vector3>.ParallelWriter vertices;
+       // [NativeDisableParallelForRestriction]
+        public NativeList<int>.ParallelWriter triangles;
+        [ReadOnly]
+        public NativeList<Vector3> Tempvertices;
+        [ReadOnly]
+        public NativeParallelMultiHashMap<Vector3, int> lookup;
+        int threadId;
+        int numIndex;
+        public void Execute(int index)
+        {
+            // threadId = index;
+
+            // Calculate the starting index for the current triplet
+            //int vertexIndex0 = tripletIndex * 3;
+            //int vertexIndex1 = vertexIndex0 + 1;
+            //int vertexIndex2 = vertexIndex0 + 2;
+
+            //Vector3 v0 = Tempvertices[vertexIndex0];
+            //Vector3 v1 = Tempvertices[vertexIndex1];
+            //Vector3 v2 = Tempvertices[vertexIndex2];
+
+
+            //int vertIndice0 = GetOrSetTriangleIndex(v0, vertexIndex0);
+            //int vertIndice1 = GetOrSetTriangleIndex(v1, vertexIndex1);
+            //int vertIndice2 = GetOrSetTriangleIndex(v2, vertexIndex2);
+
+
+
+            //vertices.AddNoResize(v0);
+            //numIndex++;
+            //triangles.AddNoResize(numIndex);
+
+            //vertices.AddNoResize(v1);
+            //numIndex++;
+            //triangles.AddNoResize(numIndex);
+
+            //vertices.AddNoResize(v2);
+            //numIndex++;
+            //triangles.AddNoResize(numIndex);
+
+
+            int vertexIndex = index * 3;
+
+            if (vertexIndex + 2 < Tempvertices.Length)
+            {
+                triangles.AddNoResize(vertexIndex);
+                triangles.AddNoResize(vertexIndex + 1);
+                triangles.AddNoResize(vertexIndex + 2);
+            }
+
+        }
+
+        //int GetOrSetTriangleIndex(Vector3 vert,int index)
+        //{
+        //    //NativeParallelMultiHashMapIterator<Vector3> iterator;
+
+        //    //if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
+        //    //{
+        //    //    do
+        //    //    {
+        //    //       // Debug.Log("found one");
+        //    //        return entryIndex;
+        //    //    }
+        //    //    while (lookup.TryGetNextValue(out entryIndex, ref iterator));
+        //    //}
+        //    //else
+        //    //{
+        //    //   // Debug.Log("nothing here to see");
+        //    //   // vertices.AddNoResize(vert);
+        //    //    return index;
+        //    //}
+        //    var data = vertices.ListData;
+        //   for (int i = 0; i < vertices.coub; i++)
+        //    {
+
+        //    }
+        //}
+    }
+
+    // [BurstCompile]
     public struct MarchingCube_Job_V2 : IJobParallelFor
     {
         public int voxelsLength;
@@ -859,7 +1052,7 @@ public class Block
 
                     ////add vertices and triangles
                     //int vertIndex = VertForIndice(vertexPosition, position);
-                   // triangles.Add(1);
+                    // triangles.Add(1);
 
 
                     //add vertices and triangles
@@ -877,7 +1070,7 @@ public class Block
 
 
 
-           
+
         }
 
         int VertForIndice(Vector3 vert, Vector3 voxelPos)
@@ -913,7 +1106,7 @@ public class Block
                 do
                 {
                     // 'entryIndex' is the value associated with the key
-                   // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
+                    // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
                     return entryIndex;
                 }
                 while (lookup.TryGetNextValue(out entryIndex, ref iterator));
@@ -922,7 +1115,7 @@ public class Block
             // If it does not exist in the map, add it and return the new index
             int newIndex = vertices.Length;
             lookup.Add(vert, newIndex);
-               vertices.Add(vert);
+            vertices.Add(vert);
 
             return newIndex;
         }
@@ -969,8 +1162,62 @@ public class Block
         }
     }
 
-
     [BurstCompile]
+    public struct CalculateHeightJob : IJobFor
+    {
+        [ReadOnly] public NativeArray<float> heightMap;
+        [NativeDisableParallelForRestriction] public NativeArray<float> ResultHeight;
+
+        [ReadOnly] public int voxelSize;
+        [ReadOnly] public int heightmapWidth;
+        [ReadOnly] public int offsetX;
+        [ReadOnly] public int offsetZ;
+        [ReadOnly] public int voxelWidth;
+        [ReadOnly] public int height;
+
+        int z;
+        int x;
+        float lastval;
+
+        public void Execute(int index)
+        {
+            //get x & z coords
+            z = index % voxelWidth;
+            x = index / (voxelWidth * voxelWidth);
+
+
+
+            // Multiply the voxel positions by the voxel size first
+            x *= voxelSize;
+            z *= voxelSize;
+
+
+            // Apply offsets
+            x += offsetX;
+            z += offsetZ;
+
+
+            //sample the height map
+            int pixelIndex = (x * heightmapWidth) + z;
+
+            if (pixelIndex < heightMap.Length && pixelIndex >= 0)
+            {
+                float sampledColor = heightMap[pixelIndex];
+                float sampledHeight = sampledColor;
+                float scaledHeight = sampledHeight * height;
+
+                if (scaledHeight > lastval)
+                {
+                    ResultHeight[0] = scaledHeight;
+                    lastval = scaledHeight;
+                    // Debug.Log($"height: {lastval} positions: {x}:{z}");
+                }
+            }
+
+        }
+    }
+
+    // [BurstCompile]
     public struct ConvertHeightMap : IJobParallelFor
     {
         public NativeArray<Color> highresMap;
