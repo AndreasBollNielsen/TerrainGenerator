@@ -14,6 +14,7 @@ using UnityEngine.Profiling;
 using UnityEngine.UIElements;
 using static Block;
 using static UnityEditor.Searcher.SearcherWindow.Alignment;
+using static UnityEngine.Rendering.DebugUI;
 using static WorldData;
 
 public class Block
@@ -279,8 +280,9 @@ public class Block
 
 
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
-        nativeVertices = new NativeList<Vector3>(1800, allocator: Allocator.TempJob);
-        NativeList<Vector3> TempVertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
+        nativeVertices = new NativeList<Vector3>(2500, allocator: Allocator.TempJob);
+        NativeList<Triangle> TempVertices = new NativeList<Triangle>(4096,allocator: Allocator.TempJob);
+        NativeList<Indices> indices = new NativeList<Indices>(allocator: Allocator.TempJob);
         nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
         lookupTable = new NativeParallelMultiHashMap<Vector3, int>(totalVertices, allocator: Allocator.Persistent);
 
@@ -322,8 +324,8 @@ public class Block
             voxelsLength = totalVoxels,
             surfaceDensity = WorldData.surfaceDensity,
             width = Width,
-            // triangles = nativeTriangles,
-            vertices = TempVertices,
+            indices = indices,
+            vertices = TempVertices.AsParallelWriter(),
             numThreads = numThreads,
             lookup = lookupTable,
 
@@ -332,28 +334,37 @@ public class Block
 
         JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 64, voxeljob);
         meshhandle.Complete();
-        Debug.Log($"lookup table {lookupTable.Count()} vertices {TempVertices.Length}");
+        //  Debug.Log($"lookup table {lookupTable.Count()} vertices {TempVertices.Length}");
         Profiler.EndSample();
+
+        //test brute force sort
+        //for (int i = 0; i < indices.Length; i++)
+        //{
+        //   Debug.Log($"index: {i} vetIndex1:{indices[i].index1} vetIndex2:{indices[i].index2} vetIndex3:{indices[i].index3} ");
+        //}
+
 
         Profiler.BeginSample("test_vertexprocess");
 
         int numTriplets = TempVertices.Length / 3;
         ProcessVertices vertexJob = new ProcessVertices()
         {
-            Tempvertices = TempVertices,
-            triangles = nativeTriangles.AsParallelWriter(),
-            //vertices = nativeVertices.AsParallelWriter(),
+            Tempvertices = nativeVertices,
+            vertices = TempVertices,
+            triangles = nativeTriangles,
+            indices = indices,
             lookup = lookupTable
         };
 
-        JobHandle vertexHandle = vertexJob.Schedule(6, 64, meshhandle);
+        JobHandle vertexHandle = vertexJob.Schedule(TempVertices.Length, meshhandle);
         Profiler.EndSample();
         JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, meshhandle, vertexHandle);
         combinedHandle = combinedJobs;
 
         combinedJobs.Complete();
-        nativeVertices.CopyFrom(TempVertices);
+       // nativeVertices.CopyFrom(TempVertices);
         TempVertices.Dispose();
+        indices.Dispose();
         SetMesh();
         Loaded = true;
 
@@ -527,9 +538,9 @@ public class Block
         [ReadOnly]
         public NativeArray<VoxelData_v2> voxelData;
         [NativeDisableParallelForRestriction]
-        public NativeList<Vector3> vertices;
+        public NativeList<Triangle>.ParallelWriter vertices;
         [NativeDisableParallelForRestriction]
-        // public NativeList<int> triangles;
+        public NativeList<Indices> indices;
         [ReadOnly]
         public WorldData.TerrainData TerrainData;
         [NativeDisableParallelForRestriction]
@@ -635,6 +646,8 @@ public class Block
 
             for (int i = 0; i < 5; i++)
             {
+                Indices Currentindices = new Indices { index1 = -1, index2 = -1, index3 = -1 };
+                Triangle triangle = new Triangle { };
                 for (int j = 0; j < 3; j++)
                 {
                     indice = TerrainData.GetTriangleTableValue(configIndex, edgeIndex);
@@ -680,20 +693,38 @@ public class Block
                     // int vertIndex = VertForIndice(vertexPosition, position);
                     //triangles.Add(vertIndex);
 
-                    bool check = checkUnique(vertexPosition);
+                  //  bool check = checkUnique(vertexPosition, Currentindices, j);
 
                     //int newIndex = vertices.Length;
                     //lookup.Add(vertexPosition, newIndex);
-                    //vertices.Add(vertexPosition);
+                   // Currentindices.SetIndex(j, vertices.Length);
+                   // vertices.AddNoResize(vertexPosition);
+                    //if (check)
+                    //{
+                    //    vertices.Add(vertexPosition);
 
-                    if (check)
+                    //    Currentindices.SetIndex(j, vertices.Length - 1);
+
+                    //}
+
+                    if(j == 0)
                     {
-                        vertices.Add(vertexPosition);
-
+                        triangle.a = vertexPosition;
+                    }
+                    else if (j == 1)
+                    {
+                        triangle.b = vertexPosition;
+                    }
+                    else if (j == 2)
+                    {
+                        triangle.c = vertexPosition;
                     }
 
                     edgeIndex++;
                 }
+
+                // indices.Add(Currentindices);
+                vertices.AddNoResize(triangle);
             }
 
 
@@ -703,71 +734,77 @@ public class Block
 
             // cubes.Dispose();
         }
-        bool checkUnique(Vector3 vert)
-        {
-            NativeParallelMultiHashMapIterator<Vector3> iterator;
+        //bool checkUnique(Vector3 vert, Indices curIndice, int iter)
+        //{
+        //    NativeParallelMultiHashMapIterator<Vector3> iterator;
 
-            if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
-            {
-                do
-                {
-                    // 'entryIndex' is the value associated with the key
-                    // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
-                    return true;
-                }
-                while (lookup.TryGetNextValue(out entryIndex, ref iterator));
-            }
-            int newIndex = vertices.Length;
-            lookup.Add(vert, newIndex);
-            return false;
-        }
-        int VertForIndice(Vector3 vert, Vector3 voxelPos)
-        {
+        //    if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
+        //    {
+        //        do
+        //        {
 
+        //            // return true if vertex is unique
+        //            return true;
+        //        }
+        //        while (lookup.TryGetNextValue(out entryIndex, ref iterator));
+        //    }
+        //    else
+        //    {
 
-            //loop through the vertices
-            //for (int i = 0; i < vertices.Length; i++)
-            //{
-            //    //check if vertex already exists in the list. return it exists
-            //    if (vertices[i] == vert)
-            //    {
-            //        return i;
-            //    }
-            //}
+        //        int newIndex = vertices.Length;
+        //       // curIndice.SetIndex(iter, newIndex);
+        //        lookup.Add(vert, newIndex);
+        //        return false;
+        //    }
+        //}
+
+        //int VertForIndice(Vector3 vert, Vector3 voxelPos)
+        //{
 
 
+        //    //loop through the vertices
+        //    //for (int i = 0; i < vertices.Length; i++)
+        //    //{
+        //    //    //check if vertex already exists in the list. return it exists
+        //    //    if (vertices[i] == vert)
+        //    //    {
+        //    //        return i;
+        //    //    }
+        //    //}
 
 
-            //  Debug.Log("adding vert");
-
-            // if it does not exist in list, add it to the list
-            //   vertices.Add(vert);
 
 
-            // return vertices.Length - 1;
+        //    //  Debug.Log("adding vert");
+
+        //    // if it does not exist in list, add it to the list
+        //    //   vertices.Add(vert);
 
 
-            NativeParallelMultiHashMapIterator<Vector3> iterator;
-
-            if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
-            {
-                do
-                {
-                    // 'entryIndex' is the value associated with the key
-                    // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
-                    return entryIndex;
-                }
-                while (lookup.TryGetNextValue(out entryIndex, ref iterator));
-            }
-
-            // If it does not exist in the map, add it and return the new index
-            int newIndex = vertices.Length;
-            lookup.Add(vert, newIndex);
-            vertices.Add(vert);
+        //    // return vertices.Length - 1;
 
 
-            return newIndex;
-        }
+        //    NativeParallelMultiHashMapIterator<Vector3> iterator;
+
+        //    if (lookup.TryGetFirstValue(vert, out int entryIndex, out iterator))
+        //    {
+        //        do
+        //        {
+        //            // 'entryIndex' is the value associated with the key
+        //            // Debug.Log($"index: {entryIndex} belongs to vert: {vert}");
+        //            return entryIndex;
+        //        }
+        //        while (lookup.TryGetNextValue(out entryIndex, ref iterator));
+        //    }
+
+        //    // If it does not exist in the map, add it and return the new index
+        //    int newIndex = vertices.Length;
+        //    lookup.Add(vert, newIndex);
+        //    vertices.Add(vert);
+
+
+        //    return newIndex;
+        //}
 
         int GetCubeConfiguration(NativeArray<half> cube)
         {
@@ -798,7 +835,7 @@ public class Block
             int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
             if (voxelIndex >= voxelData.Length)
             {
-                Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
+                // Debug.LogError($"worldpos: {worldposition} position: {x}:{y}:{z} voxelwidth: {voxelsWidth} voxelheight: {voxelsHeight} voxelSize: {voxelSize}");
                 //  UnityEditor.EditorApplication.isPlaying = false;
 
 
@@ -808,25 +845,34 @@ public class Block
             return voxelData[voxelIndex].DistanceToSurface;
         }
     }
-
-    public struct ProcessVertices : IJobParallelFor
+    [BurstCompile]
+    public struct ProcessVertices : IJobFor
     {
+        [NativeDisableParallelForRestriction,ReadOnly]
+        public NativeList<Triangle> vertices;
         [NativeDisableParallelForRestriction]
-       // public NativeList<Vector3>.ParallelWriter vertices;
-       // [NativeDisableParallelForRestriction]
-        public NativeList<int>.ParallelWriter triangles;
-        [ReadOnly]
+        public NativeList<int> triangles;
+        [NativeDisableParallelForRestriction]
         public NativeList<Vector3> Tempvertices;
+        [ReadOnly]
+        public NativeList<Indices> indices;
         [ReadOnly]
         public NativeParallelMultiHashMap<Vector3, int> lookup;
         int threadId;
         int numIndex;
         public void Execute(int index)
         {
-            // threadId = index;
+
+            Tempvertices.Add(vertices[index].a);
+            triangles.Add(Tempvertices.Length - 1);
+            Tempvertices.Add(vertices[index].b);
+            triangles.Add(Tempvertices.Length - 1);
+            Tempvertices.Add(vertices[index].c);
+            triangles.Add(Tempvertices.Length - 1);
+
 
             // Calculate the starting index for the current triplet
-            //int vertexIndex0 = tripletIndex * 3;
+            //int vertexIndex0 = index * 3;
             //int vertexIndex1 = vertexIndex0 + 1;
             //int vertexIndex2 = vertexIndex0 + 2;
 
@@ -840,6 +886,16 @@ public class Block
             //int vertIndice2 = GetOrSetTriangleIndex(v2, vertexIndex2);
 
 
+            //int vertIndice0 = indices[vertexIndex0].GetIndice(0, vertexIndex0);
+            //int vertIndice1 = indices[vertexIndex1].GetIndice(1, vertexIndex1);
+            //int vertIndice2 = indices[vertexIndex2].GetIndice(2, vertexIndex2);
+            //if (vertexIndex0 < Tempvertices.Length && vertexIndex1 < Tempvertices.Length && vertexIndex2 < Tempvertices.Length)
+            //{
+
+            //    triangles.AddNoResize(vertexIndex0);
+            //    triangles.AddNoResize(vertexIndex1);
+            //    triangles.AddNoResize(vertexIndex2);
+            //}
 
             //vertices.AddNoResize(v0);
             //numIndex++;
@@ -854,14 +910,14 @@ public class Block
             //triangles.AddNoResize(numIndex);
 
 
-            int vertexIndex = index * 3;
+            //int vertexIndex = index * 3;
 
-            if (vertexIndex + 2 < Tempvertices.Length)
-            {
-                triangles.AddNoResize(vertexIndex);
-                triangles.AddNoResize(vertexIndex + 1);
-                triangles.AddNoResize(vertexIndex + 2);
-            }
+            //if (vertexIndex + 2 < Tempvertices.Length)
+            //{
+            //    triangles.AddNoResize(vertexIndex);
+            //    triangles.AddNoResize(vertexIndex + 1);
+            //    triangles.AddNoResize(vertexIndex + 2);
+            //}
 
         }
 
@@ -1234,6 +1290,60 @@ public class Block
         public float3 a;
         public float3 b;
         public float3 c;
+    }
+
+    public struct Indices
+    {
+
+        public int index1;
+        public int index2;
+        public int index3;
+
+        public void SetIndex(int index, int value)
+        {
+            switch (index)
+            {
+                case 0:
+                    index1 = value;
+                    break;
+                case 1:
+                    index2 = value;
+                    break;
+                case 2:
+                    index3 = value;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index out of range for MyStruct.");
+            }
+        }
+
+        public int GetIndice(int index, int altValue = -1)
+        {
+            int selectedVal;
+            switch (index)
+            {
+                case 0:
+                    selectedVal = index1;
+                    break;
+
+                case 1:
+                    selectedVal = index2;
+                    break;
+                case 2:
+                    selectedVal = index3;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index out of range for MyStruct.");
+            }
+
+            if (selectedVal > 0)
+            {
+                return selectedVal;
+            }
+
+            return altValue;
+        }
+
     }
     #endregion
 }
