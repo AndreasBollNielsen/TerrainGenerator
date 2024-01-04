@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.Collections;
 using Unity.Jobs;
+using UnityEditor.Rendering;
 using UnityEngine;
 using UnityEngine.Profiling;
 using static Block;
+using static Unity.Collections.AllocatorManager;
 using static WorldData;
 //using UnityEngine.UIElements;
 //using static Unity.Collections.AllocatorManager;
@@ -275,7 +277,7 @@ public class VoxelGenerator : MonoBehaviour
             {
 
 
-               
+
 
 
                 // Debug.Log($"generating tile: {xtile}:{ytile}");
@@ -285,7 +287,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-              // numblocks = 2;
+                // numblocks = 2;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;
@@ -294,8 +296,8 @@ public class VoxelGenerator : MonoBehaviour
                 NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.Persistent);
                 for (int i = 0; i < numblocks; i++)
                 {
-                     blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
-                   // blocks[i].testjob(parameters);
+                    blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                    // blocks[i].testjob(parameters);
                     blocks[i].SetBlockId(i);
                     jobs[i] = blocks[i].GetJob();
                 }
@@ -304,7 +306,7 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
-                
+
 
                 //dispose native data
                 yield return new WaitForEndOfFrame();
@@ -399,13 +401,13 @@ public class VoxelGenerator : MonoBehaviour
         int numElements = (heightmap.Length * (maxXTiles * maxZTiles));
         Constants.CalcMemory<float>(numElements);
         Debug.Log("Done Caching. total bytes: ");
-       // yield return new WaitForSeconds(3);
+        // yield return new WaitForSeconds(3);
         StartCoroutine(InitializeWorld());
     }
 
     IEnumerator AddHeightMap()
     {
-      //  Profiler.BeginSample("test_adding heightmap");
+        //  Profiler.BeginSample("test_adding heightmap");
         int iterator = 0;
         for (int x = 0; x < maxXTiles; x++)
         {
@@ -418,7 +420,7 @@ public class VoxelGenerator : MonoBehaviour
             }
         }
         heightmaps.Clear();
-      //  Profiler.EndSample();
+        //  Profiler.EndSample();
     }
 
     void GenerateTile(int xtile, int ytile, List<Block> blocks)
@@ -596,9 +598,9 @@ public class VoxelGenerator : MonoBehaviour
 
 
         var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
-        int numLoaded = blocks.Count(x => x.Loaded == false);
+        int numLoaded = blocks.Count(x => x.Loaded == true);
         int numpriority = blocks.Count(x => x.Width < 64 && x.Loaded == false);
-        int numLowPriority = numLoaded - numpriority;
+        int numLowPriority = blocks.Count(x => x.Width >= 64 && x.Loaded == false);
         //  numpriority = numLoaded;
         object[] parameters = new object[2];
         parameters[0] = currentMap;
@@ -606,11 +608,11 @@ public class VoxelGenerator : MonoBehaviour
 
         ScheduledBlock hightPriorityBlock = new ScheduledBlock(numpriority);
         ScheduledBlock LowPriorityBlock = new ScheduledBlock(numLowPriority);
-
+        Debug.Log($"loaded blocks {numLoaded} total blocks {blocks.Count}");
         // Profiler.BeginSample("test_priorityjob");
         int priorityCounter = 0;
         int lowPriorityCounter = 0;
-        
+
         for (int i = 0; i < blocks.Count; i++)
         {
             if (!blocks[i].Loaded)
@@ -618,17 +620,17 @@ public class VoxelGenerator : MonoBehaviour
                 //start high priority jobs
                 if (blocks[i].Width < 64)
                 {
-                   // StartCoroutine(blocks[i].testjob(parameters));
+                    // StartCoroutine(blocks[i].testjob(parameters));
                     blocks[i].GenerateMesh(currentMap, terrainData);
 
                     hightPriorityBlock.blockIds.Add(i);
                     hightPriorityBlock.jobHandles[priorityCounter] = blocks[i].GetJob();
 
-                    yield return hightPriorityBlock.jobHandles[priorityCounter];
+                    //  yield return hightPriorityBlock.jobHandles[priorityCounter];
                     priorityCounter++;
-                   // Debug.Log($"priority: {priorityCounter}");
+                    // Debug.Log($"priority: {priorityCounter}");
                 }
-               
+
             }
             blocks[i].SetBlockId(i);
 
@@ -636,13 +638,14 @@ public class VoxelGenerator : MonoBehaviour
         }
 
         JobHandle HighPriorityHandle = JobHandle.CombineDependencies(hightPriorityBlock.jobHandles);
+        yield return HighPriorityHandle;
         HighPriorityHandle.Complete();
 
         for (int i = 0; i < blocks.Count; i++)
         {
             if (!blocks[i].Loaded)
             {
-               
+
                 if (blocks[i].Width >= 64)
                 {
                     // StartCoroutine(blocks[i].testjob(parameters));
@@ -661,11 +664,11 @@ public class VoxelGenerator : MonoBehaviour
         JobHandle LowPriorityHandle = JobHandle.CombineDependencies(LowPriorityBlock.jobHandles);
         LowPriorityHandle.Complete();
         JobHandle combinedJobs = JobHandle.CombineDependencies(HighPriorityHandle, LowPriorityHandle);
-      //  JobHandle.ScheduleBatchedJobs();
-       
-        
+        //  JobHandle.ScheduleBatchedJobs();
 
-         yield return combinedJobs;
+
+
+        yield return combinedJobs;
         combinedJobs.Complete();
 
         //  Profiler.EndSample();
@@ -681,13 +684,16 @@ public class VoxelGenerator : MonoBehaviour
         //}
 
 
-     //   yield return LowPriorityHandle;
-      //  LowPriorityHandle.Complete();
+        //   yield return LowPriorityHandle;
+        //  LowPriorityHandle.Complete();
 
         foreach (var block in oldBlocks)
         {
+            if (block != null)
+            {
 
-            Destroy(block.DestroyChunk());
+                Destroy(block.DestroyChunk());
+            }
         }
         oldBlocks.Clear();
 
@@ -807,49 +813,118 @@ public class VoxelGenerator : MonoBehaviour
 
         //generate new blocks
         var newblocks = GenerateBlocks(x, y);
+        newblocks = newblocks.OrderBy(block => block.X).ThenByDescending(block => block.Y).ToList();
+
         var currentblocks = tiles[x, y].GetBlocks();
-
-
-
+        currentblocks = currentblocks.OrderBy(block => block.X).ThenByDescending(block => block.Y).ToList();
+        List<int> blocklist = new List<int>();
+        Debug.Log($"currentblocks {currentblocks.Count} newblocks {newblocks.Count}");
         //compare & insert new blocks
         int i = 0;
         int numblocks = 0;
         bool blocksUpdated = false;
-        while (i < currentblocks.Count && i < newblocks.Count)
+        // Debug.Log($" current blocks {currentblocks.Count} new blocks {newblocks.Count}");
+        for (int j = 0; j < newblocks.Count; j++)
         {
-            var currentblock = currentblocks[i];
-            var newblock = newblocks[i];
-            // Debug.Log($"block loaded: {currentblock.Loaded}");
-            if (newblock.X != currentblock.X || newblock.Y != currentblock.Y)
+            var newblock = newblocks[j];
+            if (j < currentblocks.Count)
             {
-                // Extract the portion of the list to be updated
-                List<Block> blocksToRemove = currentblocks.GetRange(i, currentblocks.Count - i);
-
-                // Remove elements from the current index to the end of the list
-                currentblocks.RemoveRange(i, currentblocks.Count - i);
-
-                // Insert remaining elements from the newblocks list
-                var blocks = newblocks.GetRange(i, newblocks.Count - i);
-                numblocks = blocks.Count;
-                currentblocks.InsertRange(i, newblocks.GetRange(i, newblocks.Count - i));
-
-                // Call DestroyChunk on the old part of the list
-                // Debug.Log($"number of chunks to remove: {blocksToRemove.Count} ");
-                foreach (var block in blocksToRemove)
+                var currentblock = currentblocks[j];
+                if (newblock.X == currentblock.X && newblock.Y == currentblock.Y && newblock.Width == currentblock.Width)
                 {
+                    blocklist.Add(j);
 
-                    // Assuming DestroyChunk is a method in the Block class
-                    //  Destroy(block.DestroyChunk());
-                    oldBlocks.Add(block.HideBlock());
+
+                    newblocks[j] = currentblock;
+                   // currentblocks.RemoveAt(j);
+                    Vector2 currentpos = new Vector2(currentblock.X, currentblock.Y);
+                    Vector2 newpos = new Vector2(newblock.X, newblock.Y);
+
+                     // Debug.Log($"index: {j} old blocks: {currentpos} width: {currentblock.Width} new block: {newpos}width: {newblock.Width}");
                 }
-                blocksToRemove.Clear();
-                // Break out of the loop since we've handled the replacements
-                blocksUpdated = true;
-                break;
+                else
+                {
+                    oldBlocks.Add(currentblock.HideBlock());
+                }
+                // Debug.Log($"old blocks: {currentblocks[j].Loaded} new block: {newblock.Loaded}");
+            }
+            else
+            {
+              //  Debug.Log($"index: {j} count {currentblocks.Count}");
+                if (j < currentblocks.Count)
+                {
+                  //  oldBlocks.InsertRange(oldBlocks.Count - 1, currentblocks);
+
+                }
+              //  break;
             }
 
-            i++;
+
+
         }
+        Debug.Log($"numb of ids {oldBlocks.Count}");
+        numblocks = oldBlocks.Count;
+        //List<Block> removableblocks = new List<Block>();
+        //for (int n = 0; n < blocklist.Count; n++)
+        //{
+        //    // int index = blocklist[n];
+        //    // var block = currentblocks[index];
+        //    // removableblocks.Add(block);
+        //    //  currentblocks.RemoveAt(index);
+        //    //  var newblock = newblocks[index];
+        //    //  currentblocks.Add(newblock);
+        //}
+        newblocks = newblocks.OrderBy(x => x.Width).ToList();
+        tiles[x, y].AddBlocks(newblocks);
+
+        //foreach (var block in removableblocks)
+        //{
+
+        //    // Assuming DestroyChunk is a method in the Block class
+        //    //  Destroy(block.DestroyChunk());
+        //    oldBlocks.Add(block.HideBlock());
+        //    Debug.Log("removing");
+        //}
+        //removableblocks.Clear();
+        blocksUpdated = true;
+
+        //while (i < currentblocks.Count && i < newblocks.Count)
+        //{
+        //    var currentblock = currentblocks[i];
+        //    var newblock = newblocks[i];
+        //     Debug.Log($"block loaded: {currentblock.Loaded}");
+        //    if (newblock.X != currentblock.X && newblock.Y != currentblock.Y || newblock.Width != currentblock.Width)
+        //    {
+
+
+        //         Extract the portion of the list to be updated
+        //        List<Block> blocksToRemove = currentblocks.GetRange(i, currentblocks.Count - i);
+        //        Debug.Log($"blocks to remove: {blocksToRemove.Count}");
+        //         Remove elements from the current index to the end of the list
+        //        currentblocks.RemoveRange(i, currentblocks.Count - i);
+
+        //         Insert remaining elements from the newblocks list
+        //        var blocks = newblocks.GetRange(i, newblocks.Count - i);
+        //        numblocks = blocks.Count;
+        //        currentblocks.InsertRange(i, newblocks.GetRange(i, newblocks.Count - i));
+
+        //         Call DestroyChunk on the old part of the list
+        //         Debug.Log($"number of chunks to remove: {blocksToRemove.Count} ");
+        //        foreach (var block in blocksToRemove)
+        //        {
+
+        //             Assuming DestroyChunk is a method in the Block class
+        //              Destroy(block.DestroyChunk());
+        //            oldBlocks.Add(block.HideBlock());
+        //        }
+        //        blocksToRemove.Clear();
+        //         Break out of the loop since we've handled the replacements
+        //        blocksUpdated = true;
+        //        break;
+        //    }
+
+        //    i++;
+        //}
 
         if (numblocks > 0)
         {

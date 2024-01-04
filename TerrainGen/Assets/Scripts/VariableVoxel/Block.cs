@@ -267,7 +267,7 @@ public class Block
         JobHandle heightHandle = heightJob.Schedule(Width * Width, deps);
         heightHandle.Complete();
 
-        float maxHeight = heightResult[0] + 16;
+        float maxHeight = heightResult[0] + 64;
         heightResult.Dispose();
         Profiler.EndSample();
 
@@ -281,7 +281,7 @@ public class Block
 
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
         nativeVertices = new NativeList<Vector3>(2500, allocator: Allocator.TempJob);
-        NativeList<Triangle> TempVertices = new NativeList<Triangle>(4096,allocator: Allocator.TempJob);
+        NativeList<Triangle> TempVertices = new NativeList<Triangle>(9000,allocator: Allocator.TempJob);
         NativeList<Indices> indices = new NativeList<Indices>(allocator: Allocator.TempJob);
         nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
         lookupTable = new NativeParallelMultiHashMap<Vector3, int>(totalVertices, allocator: Allocator.Persistent);
