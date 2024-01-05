@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using static Block;
 using static Unity.Collections.AllocatorManager;
+using static UnityEditor.Progress;
 using static WorldData;
 //using UnityEngine.UIElements;
 //using static Unity.Collections.AllocatorManager;
@@ -691,8 +692,8 @@ public class VoxelGenerator : MonoBehaviour
         {
             if (block != null)
             {
-
-                Destroy(block.DestroyChunk());
+                //block.DestroyChunk().SetActive(false);
+                 Destroy(block.DestroyChunk());
             }
         }
         oldBlocks.Clear();
@@ -718,7 +719,7 @@ public class VoxelGenerator : MonoBehaviour
         terrainData.EdgeIndexes.Dispose();
         terrainData.TriangleTable.Dispose();
         // UnityEditor.EditorApplication.isPaused = true;
-        Debug.Log("finished updating mesh");
+        //  Debug.Log("finished updating mesh");
 
 
 
@@ -813,80 +814,85 @@ public class VoxelGenerator : MonoBehaviour
 
         //generate new blocks
         var newblocks = GenerateBlocks(x, y);
-        newblocks = newblocks.OrderBy(block => block.X).ThenByDescending(block => block.Y).ToList();
+        newblocks = newblocks.OrderBy(block => block.Width).ThenByDescending(block => block.X).ThenByDescending(block => block.Y).ToList();
 
         var currentblocks = tiles[x, y].GetBlocks();
-        currentblocks = currentblocks.OrderBy(block => block.X).ThenByDescending(block => block.Y).ToList();
-        List<int> blocklist = new List<int>();
-        Debug.Log($"currentblocks {currentblocks.Count} newblocks {newblocks.Count}");
+        currentblocks = currentblocks.OrderBy(block => block.Width).ThenByDescending(block => block.X).ThenByDescending(block => block.Y).ToList();
+      //  List<int> blocklist = new List<int>();
+      //  List<int> removableList = new List<int>();
+        //  Debug.Log($"currentblocks {currentblocks.Count} newblocks {newblocks.Count}");
         //compare & insert new blocks
-        int i = 0;
-        int numblocks = 0;
+      //  int i = 0;
+       // int numblocks = 0;
         bool blocksUpdated = false;
+      //  int numequal = 0;
         // Debug.Log($" current blocks {currentblocks.Count} new blocks {newblocks.Count}");
         for (int j = 0; j < newblocks.Count; j++)
         {
             var newblock = newblocks[j];
-            if (j < currentblocks.Count)
+            bool blockfound = false;
+
+            //searching through old blocks for similar blocks
+            for (int n = 0; n < currentblocks.Count; n++)
             {
-                var currentblock = currentblocks[j];
-                if (newblock.X == currentblock.X && newblock.Y == currentblock.Y && newblock.Width == currentblock.Width)
+                var curblock = currentblocks[n];
+
+                //fist check width
+                if (curblock.Width == newblock.Width)
                 {
-                    blocklist.Add(j);
-
-
-                    newblocks[j] = currentblock;
-                   // currentblocks.RemoveAt(j);
-                    Vector2 currentpos = new Vector2(currentblock.X, currentblock.Y);
+                    Vector2 currentpos = new Vector2(curblock.X, curblock.Y);
                     Vector2 newpos = new Vector2(newblock.X, newblock.Y);
 
-                     // Debug.Log($"index: {j} old blocks: {currentpos} width: {currentblock.Width} new block: {newpos}width: {newblock.Width}");
-                }
-                else
-                {
-                    oldBlocks.Add(currentblock.HideBlock());
-                }
-                // Debug.Log($"old blocks: {currentblocks[j].Loaded} new block: {newblock.Loaded}");
-            }
-            else
-            {
-              //  Debug.Log($"index: {j} count {currentblocks.Count}");
-                if (j < currentblocks.Count)
-                {
-                  //  oldBlocks.InsertRange(oldBlocks.Count - 1, currentblocks);
+                    if (curblock.X == newblock.X && curblock.Y == newblock.Y)
+                    {
+                       // numequal++;
+                      //  blocklist.Add(n);
+                        newblocks[j] = curblock;
+                        blockfound = true;
+                        currentblocks.RemoveAt(n);
+                        // Debug.Log($"index: {j} old blocks: {currentpos} width: {curblock.Width} new block: {newpos}width: {newblock.Width}");
+                        break;
+                    }
 
                 }
-              //  break;
+
+
+
             }
 
 
 
         }
-        Debug.Log($"numb of ids {oldBlocks.Count}");
-        numblocks = oldBlocks.Count;
-        //List<Block> removableblocks = new List<Block>();
-        //for (int n = 0; n < blocklist.Count; n++)
-        //{
-        //    // int index = blocklist[n];
-        //    // var block = currentblocks[index];
-        //    // removableblocks.Add(block);
-        //    //  currentblocks.RemoveAt(index);
-        //    //  var newblock = newblocks[index];
-        //    //  currentblocks.Add(newblock);
-        //}
+
+        //reorder new blocks
+       // newblocks = newblocks.OrderBy(block => block.Width).ThenByDescending(block => block.X).ThenByDescending(block => block.Y).ToList();
+
+      //  int oldblocks = newblocks.Count(x => x.Loaded == true);
+        //int newblok = newblocks.Count(x => x.Loaded == false);
+        //var nodublicates = blocklist.Distinct().ToList();
+        //int remove = currentblocks.Count;
+
+        int numtoremove = 0;
+        for (int n = 0; n < currentblocks.Count; n++)
+        {
+            oldBlocks.Add(currentblocks[n]);
+
+        }
+      //  numblocks = oldBlocks.Count;
+
+        //  Debug.Log($"non loaded {newblok} loaded: {oldblocks} num removable: {remove} converted: {nodublicates.Count}");
         newblocks = newblocks.OrderBy(x => x.Width).ToList();
         tiles[x, y].AddBlocks(newblocks);
 
-        //foreach (var block in removableblocks)
-        //{
+        if (currentblocks.Count > 0)
+        {
+            blocksUpdated = true;
 
-        //    // Assuming DestroyChunk is a method in the Block class
-        //    //  Destroy(block.DestroyChunk());
-        //    oldBlocks.Add(block.HideBlock());
-        //    Debug.Log("removing");
-        //}
-        //removableblocks.Clear();
-        blocksUpdated = true;
+           // Debug.Log($"no change {x}:{y}");
+            // Debug.Log(oldBlocks.Count);
+        }
+        
+
 
         //while (i < currentblocks.Count && i < newblocks.Count)
         //{
@@ -926,9 +932,9 @@ public class VoxelGenerator : MonoBehaviour
         //    i++;
         //}
 
-        if (numblocks > 0)
+        if (currentblocks.Count > 0)
         {
-            Debug.Log($"updating blocks {x}:{y} numblocks: {numblocks} update mesh?: {blocksUpdated}");
+            Debug.Log($"updating blocks {x}:{y} numblocks: {newblocks.Count} update mesh?: {blocksUpdated}");
 
         }
 
