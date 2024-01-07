@@ -5,16 +5,15 @@ using System.Linq;
 using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Entities.UniversalDelegates;
+//using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEditor.Rendering.LookDev;
+//using UnityEditor.Rendering.LookDev;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.UIElements;
 using static Block;
-using static UnityEditor.Searcher.SearcherWindow.Alignment;
-using static UnityEngine.Rendering.DebugUI;
+
 using static WorldData;
 
 public class Block
