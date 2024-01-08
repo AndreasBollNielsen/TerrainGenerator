@@ -288,7 +288,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-                // numblocks = 2;
+                numblocks = 4;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;
@@ -297,6 +297,7 @@ public class VoxelGenerator : MonoBehaviour
                 NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.Persistent);
                 for (int i = 0; i < numblocks; i++)
                 {
+                    blocks[i].CalculateHeight(heightmaps[heightmapCounter]);
                     blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
                     // blocks[i].testjob(parameters);
                     blocks[i].SetBlockId(i);
@@ -331,9 +332,7 @@ public class VoxelGenerator : MonoBehaviour
                 //currentVoxelHeight = Constants.height + 1;
                 //currentVoxelWidth = blocks[0].Width + 1;
                 //currentVoxelPos = blocks[0].GetPosition();
-                //TestVoxelGeneration();
-                //currentVoxelHeight = 128 + 1;
-                //currentVoxelWidth = 128 + 1;
+
 
 
 
@@ -367,6 +366,23 @@ public class VoxelGenerator : MonoBehaviour
 
             Debug.Log($"disposed: {counter}");
         }
+
+        //test voxeldata
+        var blcks = tiles[0, 0].GetBlocks();
+        List<Vector3Int> modified = new List<Vector3Int>();
+        for (int i = 0; i < 250; i++)
+        {
+            Vector3Int mod = new Vector3Int(16, 1350 + i, 16);
+            modified.Add(mod);
+        }
+        blcks[0].RebuildVoxels(ManagedHeightmaps[new Vector2Int(0, 0)], modified, new Unity.Mathematics.half(1));
+        //set current voxels to be displayed
+
+        CurrentvoxelData = blcks[0].GetVoxelData();
+        currentVoxelHeight = Mathf.FloorToInt(blcks[0].MaxHeight + 1);
+        currentVoxelWidth = blcks[0].Width + 1;
+        currentVoxelPos = blcks[0].GetPosition();
+        Debug.Log($"voxel length: {CurrentvoxelData.Length} height: {currentVoxelHeight} width: {currentVoxelWidth}");
     }
 
     IEnumerator cacheHeightMaps()
@@ -560,7 +576,6 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
-
     void initTiles()
     {
         for (int x = 0; x < tiles.GetLength(0); x++)
@@ -622,6 +637,7 @@ public class VoxelGenerator : MonoBehaviour
                 if (blocks[i].Width < 64)
                 {
                     // StartCoroutine(blocks[i].testjob(parameters));
+                    blocks[i].CalculateHeight(currentMap);
                     blocks[i].GenerateMesh(currentMap, terrainData);
 
                     hightPriorityBlock.blockIds.Add(i);
@@ -650,6 +666,7 @@ public class VoxelGenerator : MonoBehaviour
                 if (blocks[i].Width >= 64)
                 {
                     // StartCoroutine(blocks[i].testjob(parameters));
+                    blocks[i].CalculateHeight(currentMap);
                     blocks[i].GenerateMesh(currentMap, terrainData);
                     LowPriorityBlock.blockIds.Add(i);
                     LowPriorityBlock.jobHandles[lowPriorityCounter] = blocks[i].GetJob();
@@ -665,35 +682,21 @@ public class VoxelGenerator : MonoBehaviour
         JobHandle LowPriorityHandle = JobHandle.CombineDependencies(LowPriorityBlock.jobHandles);
         LowPriorityHandle.Complete();
         JobHandle combinedJobs = JobHandle.CombineDependencies(HighPriorityHandle, LowPriorityHandle);
-        //  JobHandle.ScheduleBatchedJobs();
+
 
 
 
         yield return combinedJobs;
         combinedJobs.Complete();
 
-        //  Profiler.EndSample();
-        //   UnityEditor.EditorApplication.isPaused = true;
-        //for (int i = 0; i < hightPriorityBlock.blockIds.Count; i++)
-        //{
-        //    int blockId = hightPriorityBlock.blockIds[i];
-        //    if (!blocks[blockId].Loaded)
-        //    {
-        //        blocks[blockId].SetMesh();
-        //        blocks[blockId].Loaded = true;
-        //    }
-        //}
 
-
-        //   yield return LowPriorityHandle;
-        //  LowPriorityHandle.Complete();
 
         foreach (var block in oldBlocks)
         {
             if (block != null)
             {
                 //block.DestroyChunk().SetActive(false);
-                 Destroy(block.DestroyChunk());
+                Destroy(block.DestroyChunk());
             }
         }
         oldBlocks.Clear();
@@ -818,14 +821,14 @@ public class VoxelGenerator : MonoBehaviour
 
         var currentblocks = tiles[x, y].GetBlocks();
         currentblocks = currentblocks.OrderBy(block => block.Width).ThenByDescending(block => block.X).ThenByDescending(block => block.Y).ToList();
-      //  List<int> blocklist = new List<int>();
-      //  List<int> removableList = new List<int>();
+        //  List<int> blocklist = new List<int>();
+        //  List<int> removableList = new List<int>();
         //  Debug.Log($"currentblocks {currentblocks.Count} newblocks {newblocks.Count}");
         //compare & insert new blocks
-      //  int i = 0;
-       // int numblocks = 0;
+        //  int i = 0;
+        // int numblocks = 0;
         bool blocksUpdated = false;
-      //  int numequal = 0;
+        //  int numequal = 0;
         // Debug.Log($" current blocks {currentblocks.Count} new blocks {newblocks.Count}");
         for (int j = 0; j < newblocks.Count; j++)
         {
@@ -845,8 +848,8 @@ public class VoxelGenerator : MonoBehaviour
 
                     if (curblock.X == newblock.X && curblock.Y == newblock.Y)
                     {
-                       // numequal++;
-                      //  blocklist.Add(n);
+                        // numequal++;
+                        //  blocklist.Add(n);
                         newblocks[j] = curblock;
                         blockfound = true;
                         currentblocks.RemoveAt(n);
@@ -865,9 +868,9 @@ public class VoxelGenerator : MonoBehaviour
         }
 
         //reorder new blocks
-       // newblocks = newblocks.OrderBy(block => block.Width).ThenByDescending(block => block.X).ThenByDescending(block => block.Y).ToList();
+        // newblocks = newblocks.OrderBy(block => block.Width).ThenByDescending(block => block.X).ThenByDescending(block => block.Y).ToList();
 
-      //  int oldblocks = newblocks.Count(x => x.Loaded == true);
+        //  int oldblocks = newblocks.Count(x => x.Loaded == true);
         //int newblok = newblocks.Count(x => x.Loaded == false);
         //var nodublicates = blocklist.Distinct().ToList();
         //int remove = currentblocks.Count;
@@ -878,7 +881,7 @@ public class VoxelGenerator : MonoBehaviour
             oldBlocks.Add(currentblocks[n]);
 
         }
-      //  numblocks = oldBlocks.Count;
+        //  numblocks = oldBlocks.Count;
 
         //  Debug.Log($"non loaded {newblok} loaded: {oldblocks} num removable: {remove} converted: {nodublicates.Count}");
         newblocks = newblocks.OrderBy(x => x.Width).ToList();
@@ -888,10 +891,10 @@ public class VoxelGenerator : MonoBehaviour
         {
             blocksUpdated = true;
 
-           // Debug.Log($"no change {x}:{y}");
+            // Debug.Log($"no change {x}:{y}");
             // Debug.Log(oldBlocks.Count);
         }
-        
+
 
 
         //while (i < currentblocks.Count && i < newblocks.Count)
@@ -978,37 +981,49 @@ public class VoxelGenerator : MonoBehaviour
     {
 
         int voxel_Size = Mathf.Clamp(((voxelwidth - 1) / Constants.minChunkWidth) * Constants.minVoxelSize, 1, 256);
-        //  Debug.Log(voxel_Size);
         voxelwidth = voxelwidth / minVoxelSize;
         voxelheight = voxelheight / minVoxelSize;
-        for (int index = 0; index < CurrentvoxelData.Length; index++)
+        //   Debug.Log($"voxelsize: {voxel_Size} width: {voxelwidth} height: {voxelheight}");
+        if (CurrentvoxelData != null)
         {
-            // Convert the 1D index to 3D coordinates
-            int z = index % voxelwidth;
-            int y = (index / voxelwidth) % voxelheight;
-            int x = index / (voxelwidth * voxelheight);
 
-            // Calculate the position of the voxel in world space
-            Vector3 voxelPosition = new Vector3(
-                x * voxel_Size,
-                y * voxel_Size,
-                z * voxel_Size
-            );
-            voxelPosition += new Vector3(chunkpos.x, 0, chunkpos.y);
-            // Calculate a t value based on DistanceToSurface
-            float t = Mathf.InverseLerp(0f, 10f, CurrentvoxelData[index].DistanceToSurface);
-
-            // Interpolate between startColor and endColor based on t
-            Color voxelcol = Color.Lerp(startColor, endColor, t);
-
-            // Call the DrawCube method to draw a cube at the voxel's position
-            if (CurrentvoxelData[index].DistanceToSurface <= displayThreshold)
+            for (int index = 0; index < CurrentvoxelData.Length; index++)
             {
-                // DrawCube(voxelPosition, voxelSize, voxelcol);
-                Gizmos.color = voxelcol;
+                // Convert the 1D index to 3D coordinates
+                int z = index % voxelwidth;
+                int y = (index / voxelwidth) % voxelheight;
+                int x = index / (voxelwidth * voxelheight);
+
+                // Calculate the position of the voxel in world space
+                Vector3 voxelPosition = new Vector3(
+                    x * voxel_Size,
+                    y * voxel_Size,
+                    z * voxel_Size
+                );
+                voxelPosition += new Vector3(chunkpos.x, 0, chunkpos.y);
+                // Calculate a t value based on DistanceToSurface
+                float t = Mathf.InverseLerp(0f, 10f, CurrentvoxelData[index].DistanceToSurface);
+
+                // Interpolate between startColor and endColor based on t
+                Color voxelcol = Color.Lerp(startColor, endColor, t);
+
+                // Call the DrawCube method to draw a cube at the voxel's position
+                if (CurrentvoxelData[index].DistanceToSurface <= displayThreshold)
+                {
+                    // DrawCube(voxelPosition, voxelSize, voxelcol);
+                    Gizmos.color = voxelcol;
+                }
+
+                if (CurrentvoxelData[index].DistanceToSurface > -1.0f)
+                {
+                    Gizmos.DrawWireCube(voxelPosition, new Vector3(voxel_Size, voxel_Size, voxel_Size));
+        Debug.Log($"dist: {CurrentvoxelData[index].DistanceToSurface}");
+
+                }
             }
-            Gizmos.DrawWireCube(voxelPosition, new Vector3(voxel_Size, voxel_Size, voxel_Size));
         }
+
+
     }
 
     public float GetVoxelSample(Vector3 worldposition, int voxelSize, VoxelData[] voxelData)
