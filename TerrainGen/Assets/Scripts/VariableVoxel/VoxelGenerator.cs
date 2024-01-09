@@ -288,7 +288,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-                numblocks = 4;
+               // numblocks = 4;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;
@@ -376,8 +376,11 @@ public class VoxelGenerator : MonoBehaviour
             modified.Add(mod);
         }
         blcks[0].RebuildVoxels(ManagedHeightmaps[new Vector2Int(0, 0)], modified, new Unity.Mathematics.half(1));
-        //set current voxels to be displayed
 
+
+
+
+        //set current voxels to be displayed
         CurrentvoxelData = blcks[0].GetVoxelData();
         currentVoxelHeight = Mathf.FloorToInt(blcks[0].MaxHeight + 1);
         currentVoxelWidth = blcks[0].Width + 1;
@@ -689,8 +692,7 @@ public class VoxelGenerator : MonoBehaviour
         yield return combinedJobs;
         combinedJobs.Complete();
 
-
-
+        
         foreach (var block in oldBlocks)
         {
             if (block != null)
@@ -1016,10 +1018,10 @@ public class VoxelGenerator : MonoBehaviour
 
                 if (CurrentvoxelData[index].DistanceToSurface > -1.0f)
                 {
-                    Gizmos.DrawWireCube(voxelPosition, new Vector3(voxel_Size, voxel_Size, voxel_Size));
-        Debug.Log($"dist: {CurrentvoxelData[index].DistanceToSurface}");
 
                 }
+                   // Debug.Log($"dist: {CurrentvoxelData[index].DistanceToSurface}");
+                    Gizmos.DrawWireCube(voxelPosition, new Vector3(voxel_Size, voxel_Size, voxel_Size));
             }
         }
 

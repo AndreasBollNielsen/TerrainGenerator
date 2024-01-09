@@ -50,7 +50,7 @@ public class Block
 
     public VoxelData_v2[] GetVoxelData()
     {
-        if(voxelData == null)
+        if (voxelData == null)
         {
             return null;
         }
@@ -204,7 +204,6 @@ public class Block
 
         Profiler.BeginSample("test_vertexprocess");
 
-        // int numTriplets = TempVertices.Length / 3;
         ProcessVertices vertexJob = new ProcessVertices()
         {
             Tempvertices = nativeVertices,
@@ -283,14 +282,66 @@ public class Block
         nativeHeightMap.Dispose();
         modified.Dispose();
     }
-    public void SetMesh()
+
+    public void RebuildMesh(NativeArray<float> heightMap, WorldData.TerrainData terrainData)
     {
 
+        nativeVertices = new NativeList<Vector3>(2500, allocator: Allocator.TempJob);
+        NativeList<Triangle> TempVertices = new NativeList<Triangle>(9000, allocator: Allocator.TempJob);
+        nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
+        colors = new NativeList<Color>(allocator: Allocator.TempJob);
+
+        float chunkWidth = (float)Width / Constants.minChunkWidth;
+        int voxel_Size = Mathf.RoundToInt(Mathf.Clamp(chunkWidth * Constants.minVoxelSize, 1, 256));
+        int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
+        int zVoxels = xVoxels;
+        int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
+        int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
+
+
+        MarchingCube_Job Meshjob = new MarchingCube_Job()
+        {
+            TerrainData = terrainData,
+            voxelData = voxelData,
+            voxelSize = voxel_Size,
+            voxelWidth = xVoxels,
+            voxelHeight = yVoxels,
+            height = Constants.height,
+            voxelsLength = totalVoxels,
+            surfaceDensity = WorldData.surfaceDensity,
+            width = Width,
+
+            vertices = TempVertices.AsParallelWriter(),
 
 
 
+        };
 
+        JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 64);
+        meshhandle.Complete();
 
+        ProcessVertices vertexJob = new ProcessVertices()
+        {
+            Tempvertices = nativeVertices,
+            vertices = TempVertices,
+            triangles = nativeTriangles,
+            colors = colors
+
+        };
+
+        JobHandle vertexHandle = vertexJob.Schedule(TempVertices.Length, meshhandle);
+
+        JobHandle combinedJobs = JobHandle.CombineDependencies(meshhandle, vertexHandle);
+        combinedHandle = combinedJobs;
+
+        combinedJobs.Complete();
+        TempVertices.Dispose();
+        SetMesh();
+        Loaded = true;
+    }
+
+    public void SetMesh()
+    {
         //set mesh
         Mesh mesh = new Mesh();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -302,16 +353,13 @@ public class Block
 
         Vector2Int offset = new Vector2Int(offsetX, offsetY);
 
-        // Profiler.EndSample();
+
         colors.Dispose();
         nativeVertices.Dispose();
         nativeTriangles.Dispose();
         voxelData.Dispose();
-        //  lookupTable.Dispose();
-        // Debug.Log("nativedata disposed");
-        //Triangles.Dispose();
 
-
+        
 
         //add mesh to gameobject
         GameObject go = new GameObject();
