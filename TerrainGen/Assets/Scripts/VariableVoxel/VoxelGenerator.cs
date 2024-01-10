@@ -4,11 +4,13 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.VisualScripting;
 using UnityEditor.Rendering;
 using UnityEngine;
 using UnityEngine.Profiling;
 using static Block;
 using static Unity.Collections.AllocatorManager;
+using static UnityEditor.ShaderGraph.Internal.KeywordDependentCollection;
 //using static UnityEditor.Progress;
 using static WorldData;
 //using UnityEngine.UIElements;
@@ -19,6 +21,8 @@ using static WorldData;
 
 public class VoxelGenerator : MonoBehaviour
 {
+    private static VoxelGenerator _instance;
+    public static VoxelGenerator Instance { get { return _instance; } }
 
     [SerializeField] int height;
     [SerializeField] int minChunkWidth;
@@ -52,14 +56,27 @@ public class VoxelGenerator : MonoBehaviour
     private int lastTileX;
     private int lastTileZ;
 
+
     List<NativeArray<float>> heightmaps = new List<NativeArray<float>>();
-    //List<List<float>> ManagedHeightmaps = new List<List<float>>();
     Dictionary<Vector2Int, List<float>> ManagedHeightmaps = new Dictionary<Vector2Int, List<float>>();
     int currentVoxelWidth;
     int currentVoxelHeight;
     Vector3 currentVoxelPos;
     List<Block> oldBlocks = new List<Block>();
+    List<Block> SelectedBlocks = new List<Block>();
+    bool interactEnabled = false;
 
+    private void Awake()
+    {
+        if (_instance != null && _instance != this)
+        {
+            Destroy(this.gameObject);
+        }
+        else
+        {
+            _instance = this;
+        }
+    }
 
     private void Start()
     {
@@ -235,6 +252,45 @@ public class VoxelGenerator : MonoBehaviour
         // Check if the player has moved to a new tile
         if (currentBlockX != lastTileX || currentBlockZ != lastTileZ)
         {
+            //select blocks when modifying
+            if (interactEnabled)
+            {
+                var playerpos = player.transform.position;
+                var currentTile = GetTile(playerpos);
+                if (SelectedBlocks.Count > 0)
+                {
+                    //reset old blocks and then clear list
+                    foreach (var block in SelectedBlocks)
+                    {
+                        var chunk = block.GetChunk().chunkObject;
+                        chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+                    }
+                    SelectedBlocks.Clear();
+
+                }
+                var blocks = currentTile.GetBlocks(playerpos, 32);
+                if (blocks != null)
+                {
+                    SelectedBlocks = blocks;
+
+                }
+
+                Debug.Log(SelectedBlocks.Count);
+            }
+            else
+            {
+                if (SelectedBlocks.Count > 0)
+                {
+
+                    foreach (var block in SelectedBlocks)
+                    {
+                        var chunk = block.GetChunk().chunkObject;
+                        chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+                    }
+                    SelectedBlocks.Clear();
+                }
+            }
+
             for (int x = 0; x < tiles.GetLength(0); x++)
             {
                 for (int y = 0; y < tiles.GetLength(1); y++)
@@ -242,11 +298,13 @@ public class VoxelGenerator : MonoBehaviour
                     //update blocks and recreate mesh if blocks has changed
                     if (UpdateBlocks(x, y))
                     {
-                        //   UpdateMesh(new Vector2Int(x, y));
+                        SelectedBlocks.Clear();
                         StartCoroutine(UpdateMeshAsync(new Vector2Int(x, y)));
                     }
                 }
             }
+
+
 
             lastTileX = currentBlockX;
             lastTileZ = currentBlockZ;
@@ -258,7 +316,38 @@ public class VoxelGenerator : MonoBehaviour
             Application.Quit();
         }
 
+        if (Input.GetKeyUp(KeyCode.F))
+        {
+            interactEnabled = !interactEnabled;
+        }
+
+
+        if (interactEnabled)
+        {
+            var playerpos = player.transform.position;
+            var currentTile = GetTile(playerpos);
+            if (SelectedBlocks.Count < 1)
+            {
+                //initialize current blocks
+                var blocks = currentTile.GetBlocks(playerpos, 30);
+                if (blocks != null)
+                {
+                    SelectedBlocks = blocks;
+                    foreach (var block in SelectedBlocks)
+                    {
+                        var chunk = block.GetChunk().chunkObject;
+                        chunk.transform.position += new Vector3(0, 1, 0);
+                    }
+                }
+
+
+            }
+
+            // Debug.Log(SelectedBlocks.Count);
+        }
     }
+
+    //async operations
     IEnumerator InitializeWorld()
     {
         Debug.Log("generating chunks");
@@ -288,7 +377,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-               // numblocks = 4;
+                // numblocks = 4;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;
@@ -355,9 +444,8 @@ public class VoxelGenerator : MonoBehaviour
         if (counter == 0)
         {
             Profiler.BeginSample("test_dispose");
-            terrainData.CornerTable.Dispose();
-            terrainData.EdgeIndexes.Dispose();
-            terrainData.TriangleTable.Dispose();
+            terrainData.DisposeAll();
+
             Profiler.EndSample();
             yield return new WaitForEndOfFrame();
             StartCoroutine(AddHeightMap());
@@ -370,22 +458,34 @@ public class VoxelGenerator : MonoBehaviour
         //test voxeldata
         var blcks = tiles[0, 0].GetBlocks();
         List<Vector3Int> modified = new List<Vector3Int>();
-        for (int i = 0; i < 250; i++)
+        for (int i = 0; i < 500; i++)
         {
-            Vector3Int mod = new Vector3Int(16, 1350 + i, 16);
-            modified.Add(mod);
+            for (int j = 0; j < 5; j++)
+            {
+                Vector3Int mod = new Vector3Int(10 + j, 1000 + i, 10);
+                modified.Add(mod);
+
+            }
         }
-        blcks[0].RebuildVoxels(ManagedHeightmaps[new Vector2Int(0, 0)], modified, new Unity.Mathematics.half(1));
 
+        terrainData = new WorldData.TerrainData
+        {
+            CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
+            EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
+            TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
+        };
 
+        blcks[0].RebuildVoxels(ManagedHeightmaps[new Vector2Int(0, 0)], modified, new Unity.Mathematics.half(1.0f));
+        blcks[0].RebuildMesh(terrainData);
 
+        terrainData.DisposeAll();
 
         //set current voxels to be displayed
-        CurrentvoxelData = blcks[0].GetVoxelData();
+        //  CurrentvoxelData = blcks[0].GetVoxelData();
         currentVoxelHeight = Mathf.FloorToInt(blcks[0].MaxHeight + 1);
         currentVoxelWidth = blcks[0].Width + 1;
         currentVoxelPos = blcks[0].GetPosition();
-        Debug.Log($"voxel length: {CurrentvoxelData.Length} height: {currentVoxelHeight} width: {currentVoxelWidth}");
+        //  Debug.Log($"voxel length: {CurrentvoxelData.Length} height: {currentVoxelHeight} width: {currentVoxelWidth}");
     }
 
     IEnumerator cacheHeightMaps()
@@ -443,6 +543,145 @@ public class VoxelGenerator : MonoBehaviour
         //  Profiler.EndSample();
     }
 
+    IEnumerator UpdateMeshAsync(Vector2Int tilepos)
+    {
+
+        Debug.Log("rebuilding " + tilepos);
+        WorldData.TerrainData terrainData = new WorldData.TerrainData
+        {
+            CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
+            EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
+            TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
+        };
+        bool lockinteracting = false;
+        if (interactEnabled)
+        {
+            lockinteracting = true;
+            interactEnabled = false;
+        }
+
+        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
+
+
+        var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
+        int numLoaded = blocks.Count(x => x.Loaded == true);
+        int numpriority = blocks.Count(x => x.Width < 64 && x.Loaded == false);
+        int numLowPriority = blocks.Count(x => x.Width >= 64 && x.Loaded == false);
+        //  numpriority = numLoaded;
+        object[] parameters = new object[2];
+        parameters[0] = currentMap;
+        parameters[1] = terrainData;
+
+        ScheduledBlock hightPriorityBlock = new ScheduledBlock(numpriority);
+        ScheduledBlock LowPriorityBlock = new ScheduledBlock(numLowPriority);
+        Debug.Log($"loaded blocks {numLoaded} total blocks {blocks.Count}");
+        // Profiler.BeginSample("test_priorityjob");
+        int priorityCounter = 0;
+        int lowPriorityCounter = 0;
+
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            if (!blocks[i].Loaded)
+            {
+                //start high priority jobs
+                if (blocks[i].Width < 64)
+                {
+                    // StartCoroutine(blocks[i].testjob(parameters));
+                    blocks[i].CalculateHeight(currentMap);
+                    blocks[i].GenerateMesh(currentMap, terrainData);
+
+                    hightPriorityBlock.blockIds.Add(i);
+                    hightPriorityBlock.jobHandles[priorityCounter] = blocks[i].GetJob();
+
+                    //  yield return hightPriorityBlock.jobHandles[priorityCounter];
+                    priorityCounter++;
+                    // Debug.Log($"priority: {priorityCounter}");
+                }
+
+            }
+            blocks[i].SetBlockId(i);
+
+
+        }
+
+        JobHandle HighPriorityHandle = JobHandle.CombineDependencies(hightPriorityBlock.jobHandles);
+        yield return HighPriorityHandle;
+        HighPriorityHandle.Complete();
+
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            if (!blocks[i].Loaded)
+            {
+
+                if (blocks[i].Width >= 64)
+                {
+                    // StartCoroutine(blocks[i].testjob(parameters));
+                    blocks[i].CalculateHeight(currentMap);
+                    blocks[i].GenerateMesh(currentMap, terrainData);
+                    LowPriorityBlock.blockIds.Add(i);
+                    LowPriorityBlock.jobHandles[lowPriorityCounter] = blocks[i].GetJob();
+
+                    yield return LowPriorityBlock.jobHandles[lowPriorityCounter];
+                    lowPriorityCounter++;
+                }
+            }
+            blocks[i].SetBlockId(i);
+
+
+        }
+        JobHandle LowPriorityHandle = JobHandle.CombineDependencies(LowPriorityBlock.jobHandles);
+        LowPriorityHandle.Complete();
+        JobHandle combinedJobs = JobHandle.CombineDependencies(HighPriorityHandle, LowPriorityHandle);
+
+
+
+
+        yield return combinedJobs;
+        combinedJobs.Complete();
+
+        // yield return new WaitForEndOfFrame();
+        foreach (var block in oldBlocks)
+        {
+            if (block != null)
+            {
+                //block.DestroyChunk().SetActive(false);
+                Destroy(block.DestroyChunk());
+            }
+        }
+        oldBlocks.Clear();
+
+        var tileobject = tiles[tilepos.x, tilepos.y].GetTileObject();
+        if (tileobject != null)
+        {
+            // Debug.Log($"tileobject: {tileobject.name}");
+            tiles[tilepos.x, tilepos.y].SetChunksParent(tileobject);
+
+        }
+        else
+        {
+            Debug.Log($"tileobject at: {tilepos} is null");
+        }
+
+        hightPriorityBlock.jobHandles.Dispose();
+        hightPriorityBlock.blockIds.Clear();
+        LowPriorityBlock.jobHandles.Dispose();
+        LowPriorityBlock.blockIds.Clear();
+        currentMap.Dispose();
+        terrainData.DisposeAll();
+
+        // UnityEditor.EditorApplication.isPaused = true;
+        //  Debug.Log("finished updating mesh");
+
+
+        if (lockinteracting)
+        {
+            interactEnabled = true;
+            lockinteracting = false;
+        }
+
+    }
+
+    //Generate tile object
     void GenerateTile(int xtile, int ytile, List<Block> blocks)
     {
         //generate new tile
@@ -463,7 +702,7 @@ public class VoxelGenerator : MonoBehaviour
     }
 
 
-
+    //block manipulation
     List<Block> GenerateBlocks(int tileX, int tileY)
     {
         Profiler.BeginSample("generating blocks");
@@ -575,239 +814,6 @@ public class VoxelGenerator : MonoBehaviour
             return block;
         }
     }
-
-
-
-
-    void initTiles()
-    {
-        for (int x = 0; x < tiles.GetLength(0); x++)
-        {
-            for (int y = 0; y < tiles.GetLength(1); y++)
-            {
-                if (tiles[x, y] != null)
-                {
-                    tiles[x, y].Width = 0;
-                    tiles[x, y].NumChunks = 0;
-
-                }
-                else
-                {
-                    tiles[x, y] = new TerrainTile(x, y);
-
-                }
-            }
-        }
-    }
-
-    IEnumerator UpdateMeshAsync(Vector2Int tilepos)
-    {
-
-        Debug.Log("rebuilding " + tilepos);
-        WorldData.TerrainData terrainData = new WorldData.TerrainData
-        {
-            CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
-            EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
-            TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
-        };
-
-
-
-        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
-
-
-        var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
-        int numLoaded = blocks.Count(x => x.Loaded == true);
-        int numpriority = blocks.Count(x => x.Width < 64 && x.Loaded == false);
-        int numLowPriority = blocks.Count(x => x.Width >= 64 && x.Loaded == false);
-        //  numpriority = numLoaded;
-        object[] parameters = new object[2];
-        parameters[0] = currentMap;
-        parameters[1] = terrainData;
-
-        ScheduledBlock hightPriorityBlock = new ScheduledBlock(numpriority);
-        ScheduledBlock LowPriorityBlock = new ScheduledBlock(numLowPriority);
-        Debug.Log($"loaded blocks {numLoaded} total blocks {blocks.Count}");
-        // Profiler.BeginSample("test_priorityjob");
-        int priorityCounter = 0;
-        int lowPriorityCounter = 0;
-
-        for (int i = 0; i < blocks.Count; i++)
-        {
-            if (!blocks[i].Loaded)
-            {
-                //start high priority jobs
-                if (blocks[i].Width < 64)
-                {
-                    // StartCoroutine(blocks[i].testjob(parameters));
-                    blocks[i].CalculateHeight(currentMap);
-                    blocks[i].GenerateMesh(currentMap, terrainData);
-
-                    hightPriorityBlock.blockIds.Add(i);
-                    hightPriorityBlock.jobHandles[priorityCounter] = blocks[i].GetJob();
-
-                    //  yield return hightPriorityBlock.jobHandles[priorityCounter];
-                    priorityCounter++;
-                    // Debug.Log($"priority: {priorityCounter}");
-                }
-
-            }
-            blocks[i].SetBlockId(i);
-
-
-        }
-
-        JobHandle HighPriorityHandle = JobHandle.CombineDependencies(hightPriorityBlock.jobHandles);
-        yield return HighPriorityHandle;
-        HighPriorityHandle.Complete();
-
-        for (int i = 0; i < blocks.Count; i++)
-        {
-            if (!blocks[i].Loaded)
-            {
-
-                if (blocks[i].Width >= 64)
-                {
-                    // StartCoroutine(blocks[i].testjob(parameters));
-                    blocks[i].CalculateHeight(currentMap);
-                    blocks[i].GenerateMesh(currentMap, terrainData);
-                    LowPriorityBlock.blockIds.Add(i);
-                    LowPriorityBlock.jobHandles[lowPriorityCounter] = blocks[i].GetJob();
-
-                    yield return LowPriorityBlock.jobHandles[lowPriorityCounter];
-                    lowPriorityCounter++;
-                }
-            }
-            blocks[i].SetBlockId(i);
-
-
-        }
-        JobHandle LowPriorityHandle = JobHandle.CombineDependencies(LowPriorityBlock.jobHandles);
-        LowPriorityHandle.Complete();
-        JobHandle combinedJobs = JobHandle.CombineDependencies(HighPriorityHandle, LowPriorityHandle);
-
-
-
-
-        yield return combinedJobs;
-        combinedJobs.Complete();
-
-        
-        foreach (var block in oldBlocks)
-        {
-            if (block != null)
-            {
-                //block.DestroyChunk().SetActive(false);
-                Destroy(block.DestroyChunk());
-            }
-        }
-        oldBlocks.Clear();
-
-        var tileobject = tiles[tilepos.x, tilepos.y].GetTileObject();
-        if (tileobject != null)
-        {
-            // Debug.Log($"tileobject: {tileobject.name}");
-            tiles[tilepos.x, tilepos.y].SetChunksParent(tileobject);
-
-        }
-        else
-        {
-            Debug.Log($"tileobject at: {tilepos} is null");
-        }
-
-        hightPriorityBlock.jobHandles.Dispose();
-        hightPriorityBlock.blockIds.Clear();
-        LowPriorityBlock.jobHandles.Dispose();
-        LowPriorityBlock.blockIds.Clear();
-        currentMap.Dispose();
-        terrainData.CornerTable.Dispose();
-        terrainData.EdgeIndexes.Dispose();
-        terrainData.TriangleTable.Dispose();
-        // UnityEditor.EditorApplication.isPaused = true;
-        //  Debug.Log("finished updating mesh");
-
-
-
-
-    }
-    private void UpdateMesh(Vector2Int tilepos)
-    {
-
-
-        Debug.Log("rebuilding " + tilepos);
-        WorldData.TerrainData terrainData = new WorldData.TerrainData
-        {
-            CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
-            EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
-            TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
-        };
-
-
-
-        //update mesh chunk per tile
-        Profiler.BeginSample("test_converting Heightmap");
-        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
-
-        Profiler.EndSample();
-
-        var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
-        int numLoaded = blocks.Count(x => x.Loaded == false);
-        NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numLoaded, allocator: Allocator.Persistent);
-
-        int jobCounter = 0;
-        for (int i = 0; i < blocks.Count; i++)
-        {
-            if (!blocks[i].Loaded)
-            {
-                blocks[i].GenerateMesh(currentMap, terrainData);
-                jobs[jobCounter] = blocks[i].GetJob();
-                jobCounter++;
-            }
-            blocks[i].SetBlockId(i);
-
-
-        }
-        JobHandle completeHandle = JobHandle.CombineDependencies(jobs);
-        // updatehandle = completeHandle;
-        JobHandle.ScheduleBatchedJobs();
-        // Ensure that all jobs are completed before moving on
-        completeHandle.Complete();
-
-
-
-        for (int i = 0; i < blocks.Count; i++)
-        {
-            if (!blocks[i].Loaded)
-            {
-                blocks[i].SetMesh();
-                blocks[i].Loaded = true;
-            }
-        }
-
-
-
-        var tileobject = tiles[tilepos.x, tilepos.y].GetTileObject();
-        if (tileobject != null)
-        {
-            // Debug.Log($"tileobject: {tileobject.name}");
-            tiles[tilepos.x, tilepos.y].SetChunksParent(tileobject);
-
-        }
-        else
-        {
-            Debug.Log($"tileobject at: {tilepos} is null");
-        }
-
-        jobs.Dispose();
-        currentMap.Dispose();
-        terrainData.CornerTable.Dispose();
-        terrainData.EdgeIndexes.Dispose();
-        terrainData.TriangleTable.Dispose();
-        // UnityEditor.EditorApplication.isPaused = true;
-        Debug.Log("finished updating mesh");
-
-    }
-
     bool UpdateBlocks(int x, int y)
     {
         Profiler.BeginSample("updateBlocks");
@@ -951,7 +957,27 @@ public class VoxelGenerator : MonoBehaviour
     }
 
 
+    //initialization
+    void initTiles()
+    {
+        for (int x = 0; x < tiles.GetLength(0); x++)
+        {
+            for (int y = 0; y < tiles.GetLength(1); y++)
+            {
+                if (tiles[x, y] != null)
+                {
+                    tiles[x, y].Width = 0;
+                    tiles[x, y].NumChunks = 0;
 
+                }
+                else
+                {
+                    tiles[x, y] = new TerrainTile(x, y);
+
+                }
+            }
+        }
+    }
     Color[] InitializeHeightmap(int x, int y)
     {
 
@@ -977,7 +1003,12 @@ public class VoxelGenerator : MonoBehaviour
         }
     }
 
-
+    public TerrainTile GetTile(Vector3 pos)
+    {
+        int x = Mathf.FloorToInt(pos.x / 2048);
+        int y = Mathf.FloorToInt(pos.z / 2048);
+        return tiles[x, y];
+    }
 
     private void DisplayVoxels(int voxelwidth, int voxelheight, Vector3 chunkpos)
     {
@@ -1020,8 +1051,8 @@ public class VoxelGenerator : MonoBehaviour
                 {
 
                 }
-                   // Debug.Log($"dist: {CurrentvoxelData[index].DistanceToSurface}");
-                    Gizmos.DrawWireCube(voxelPosition, new Vector3(voxel_Size, voxel_Size, voxel_Size));
+                // Debug.Log($"dist: {CurrentvoxelData[index].DistanceToSurface}");
+                Gizmos.DrawWireCube(voxelPosition, new Vector3(voxel_Size, voxel_Size, voxel_Size));
             }
         }
 

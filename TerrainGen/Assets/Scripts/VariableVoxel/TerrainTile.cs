@@ -86,9 +86,50 @@ public class TerrainTile
         blocks.AddRange(_blocks);
     }
 
+
+
     public List<Block> GetBlocks()
     {
         return blocks;
+    }
+
+    public List<Block> GetBlocks(Vector3 origin, float radius)
+    {
+        var originblock = GetBlock(origin);
+        var sortedBlocks = blocks.Where(x => x.Width < 32).ToList();
+        if (sortedBlocks != null && originblock != null)
+        {
+            if(originblock == null)
+            {
+                Debug.LogError("origin is gone");
+            }
+
+            var surroundingBlocks = sortedBlocks
+                .Where(block => Vector2.Distance(new Vector2(block.X, block.Y), new Vector2(originblock.X, originblock.Y)) <= radius).ToList();
+            if (surroundingBlocks != null)
+            {
+                surroundingBlocks = surroundingBlocks.Distinct().ToList();
+                return surroundingBlocks;
+
+            }
+        }
+        return null;
+    }
+
+    public Block GetBlock(Vector3 pos)
+    {
+        int blockWidth = 16;
+        //int blockX = Mathf.FloorToInt(pos.x / blockWidth) * blockWidth;
+        //int blockY = Mathf.FloorToInt(pos.z / blockWidth) * blockWidth;
+        // Debug.Log($"pos: {blockX} {blockY}");
+        Block block = blocks.Where(block => Vector2.Distance(new Vector2(pos.x, pos.z), new Vector2(block.X, block.Y)) <= blockWidth / 2).FirstOrDefault();
+        if (block != null)
+        {
+            // Debug.Log("returning block");
+            return block;
+        }
+        // Debug.LogError("block not found");
+        return null;
     }
 
     public GameObject GetTileObject()

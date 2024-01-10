@@ -40,7 +40,7 @@ public class Block
         this.Width = _width;
         this.X = x;
         this.Y = y;
-
+        
     }
 
     public Vector2 GetPosition()
@@ -219,9 +219,10 @@ public class Block
         combinedHandle = combinedJobs;
 
         combinedJobs.Complete();
-
         TempVertices.Dispose();
-        // indices.Dispose();
+
+        
+
         SetMesh();
         Loaded = true;
 
@@ -283,7 +284,7 @@ public class Block
         modified.Dispose();
     }
 
-    public void RebuildMesh(NativeArray<float> heightMap, WorldData.TerrainData terrainData)
+    public void RebuildMesh(WorldData.TerrainData terrainData)
     {
 
         nativeVertices = new NativeList<Vector3>(2500, allocator: Allocator.TempJob);
@@ -359,7 +360,7 @@ public class Block
         nativeTriangles.Dispose();
         voxelData.Dispose();
 
-        
+       
 
         //add mesh to gameobject
         GameObject go = new GameObject();
@@ -369,6 +370,7 @@ public class Block
         go.AddComponent<MeshRenderer>().material = Resources.Load<Material>("Terrain"); ;
         go.transform.position = new Vector3(offset.x, 0, offset.y);
         go.name = $"chunk_{offset.x}_{offset.y}";
+        go.tag = "Terrain";
 
         //create chunk object
         Chunk_v _chunk = new Chunk_v();

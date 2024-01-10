@@ -409,14 +409,11 @@ public static class WorldData
     }
 
     public struct TerrainData
-    {
-
+    { 
         public NativeArray<int> TriangleTable;
-        // public int[] TriangleTable;
         public NativeArray<int> EdgeIndexes;
-        //public int[] EdgeIndexes;
-        //  public Vector3Int[] CornerTable;
         public NativeArray<Vector3Int> CornerTable;
+       
 
         public int GetTriangleTableValue(int x, int y)
         {
@@ -428,6 +425,13 @@ public static class WorldData
         {
             // Assuming your 2D array is of size [height, EdgeIndexesWidth]
             return EdgeIndexes[x * 2 + y];
+        }
+
+        public void DisposeAll()
+        {
+            TriangleTable.Dispose();
+            EdgeIndexes.Dispose();
+            CornerTable.Dispose();
         }
     }
 }
