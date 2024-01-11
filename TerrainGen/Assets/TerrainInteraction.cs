@@ -40,7 +40,7 @@ public class TerrainInteraction : MonoBehaviour
             
             //draw a cube
             Matrix4x4 matrix = new Matrix4x4();
-            matrix.SetTRS(graphicsPos, Quaternion.identity, Vector3.one);
+            matrix.SetTRS(graphicsPos, Quaternion.identity, Vector3.one*3);
             Graphics.DrawMesh(graphics, matrix, mat, 0, cam, 0, null, false, false);
 
             if (Input.GetMouseButtonDown(0))
@@ -59,7 +59,8 @@ public class TerrainInteraction : MonoBehaviour
             {
                 if (Physics.Raycast(rayOrigin, cam.transform.forward, out hit))
                 {
-                    WorldGenerator.Instance.GetChunk(hit.transform.position).RemoveSquare(gridpos, 3);
+                   // WorldGenerator.Instance.GetChunk(hit.transform.position).RemoveSquare(gridpos, 3);
+                    VoxelGenerator.Instance.RemoveSquare(gridpos, 3);
                 }
             }
         }
@@ -72,8 +73,8 @@ public class TerrainInteraction : MonoBehaviour
     private Vector3 GetNearestGridPosition(Vector3 position)
     {
         int x = Mathf.FloorToInt(position.x / gridSize);
-        int y = Mathf.RoundToInt(position.y / gridSize);
-        int z = Mathf.RoundToInt(position.z / gridSize);
+        int y = Mathf.FloorToInt(position.y / gridSize);
+        int z = Mathf.FloorToInt(position.z / gridSize);
 
         Vector3 gridPosition = new Vector3(x * gridSize, y * gridSize, z * gridSize);
         return gridPosition;

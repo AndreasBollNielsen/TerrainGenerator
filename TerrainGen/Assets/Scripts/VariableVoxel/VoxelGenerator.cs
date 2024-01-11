@@ -53,6 +53,9 @@ public class VoxelGenerator : MonoBehaviour
 
     public Transform player;
     Vector3 lastpos;
+    private int lastBlockX;
+    private int lastBlockZ;
+
     private int lastTileX;
     private int lastTileZ;
 
@@ -65,6 +68,7 @@ public class VoxelGenerator : MonoBehaviour
     List<Block> oldBlocks = new List<Block>();
     List<Block> SelectedBlocks = new List<Block>();
     bool interactEnabled = false;
+    bool worldInitialized = false;
 
     private void Awake()
     {
@@ -90,8 +94,8 @@ public class VoxelGenerator : MonoBehaviour
         tiles = new TerrainTile[maxXTiles, maxZTiles];
 
         lastpos = player.position;
-        lastTileX = Mathf.RoundToInt(player.position.x / minChunkWidth); // Initial tile X
-        lastTileZ = Mathf.RoundToInt(player.position.z / minChunkWidth);
+        lastBlockX = Mathf.RoundToInt(player.position.x / minChunkWidth); // Initial tile X
+        lastBlockZ = Mathf.RoundToInt(player.position.z / minChunkWidth);
 
         initTiles();
 
@@ -249,20 +253,26 @@ public class VoxelGenerator : MonoBehaviour
         int currentBlockX = Mathf.RoundToInt(player.position.x / minChunkWidth);
         int currentBlockZ = Mathf.RoundToInt(player.position.z / minChunkWidth);
 
-        // Check if the player has moved to a new tile
-        if (currentBlockX != lastTileX || currentBlockZ != lastTileZ)
+        int currentTileX = Mathf.RoundToInt(player.position.x / Constants.heightmapWidth);
+        int currentTileZ = Mathf.RoundToInt(player.position.z / Constants.heightmapWidth);
+
+
+        // Check if the player has moved to a new block
+        if (currentBlockX != lastBlockX || currentBlockZ != lastBlockZ)
         {
+            var playerpos = player.transform.position;
+            var currentTile = GetTile(playerpos);
             //select blocks when modifying
             if (interactEnabled)
             {
-                var playerpos = player.transform.position;
-                var currentTile = GetTile(playerpos);
                 if (SelectedBlocks.Count > 0)
                 {
+
                     //reset old blocks and then clear list
                     foreach (var block in SelectedBlocks)
                     {
                         var chunk = block.GetChunk().chunkObject;
+                        block.UnloadVoxels();
                         chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
                     }
                     SelectedBlocks.Clear();
@@ -277,15 +287,20 @@ public class VoxelGenerator : MonoBehaviour
 
                 Debug.Log(SelectedBlocks.Count);
             }
+            // terrain manipulation disabled - clear heightmaps and selected blocks
             else
             {
+                Debug.Log("changed tile");
+                //unload voxels for each block
                 if (SelectedBlocks.Count > 0)
                 {
 
                     foreach (var block in SelectedBlocks)
                     {
                         var chunk = block.GetChunk().chunkObject;
+                        block.UnloadVoxels();
                         chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+
                     }
                     SelectedBlocks.Clear();
                 }
@@ -306,9 +321,42 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
-            lastTileX = currentBlockX;
-            lastTileZ = currentBlockZ;
+            lastBlockX = currentBlockX;
+            lastBlockZ = currentBlockZ;
         }
+
+
+        //check if player has moved to a new tile
+        if (currentTileX != lastTileX || currentTileZ != lastTileZ)
+        {
+            var playerpos = player.transform.position;
+            var currentTile = GetTile(playerpos);
+            Vector2Int tilepos = new Vector2Int(currentTile.X, currentTile.Y);
+            //update heightmap if tile has changed
+            if (interactEnabled)
+            {
+                if (heightmaps.Count > 0)
+                {
+                    foreach (var heightmap in heightmaps)
+                    {
+                        heightmap.Dispose();
+                    }
+                    heightmaps.Clear();
+
+                    //initialize new heightmap
+                    NativeArray<float> currentHeightmap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
+                    heightmaps.Add(currentHeightmap);
+                    Debug.Log("heightmap initialized");
+                }
+
+            }
+
+
+
+            lastTileX = currentTileX;
+            lastTileZ = currentTileZ;
+        }
+
 
         //quit application if escape is pushed
         if (Input.GetKey(KeyCode.Escape))
@@ -321,30 +369,68 @@ public class VoxelGenerator : MonoBehaviour
             interactEnabled = !interactEnabled;
         }
 
-
-        if (interactEnabled)
+        if (worldInitialized)
         {
-            var playerpos = player.transform.position;
-            var currentTile = GetTile(playerpos);
-            if (SelectedBlocks.Count < 1)
+            if (interactEnabled)
             {
-                //initialize current blocks
-                var blocks = currentTile.GetBlocks(playerpos, 30);
-                if (blocks != null)
+                var playerpos = player.transform.position;
+                var currentTile = GetTile(playerpos);
+                if (SelectedBlocks.Count < 1)
                 {
-                    SelectedBlocks = blocks;
+                    //initialize current blocks
+                    var blocks = currentTile.GetBlocks(playerpos, 30);
+                    if (blocks != null)
+                    {
+                        SelectedBlocks = blocks;
+                        Vector2Int tilepos = new Vector2Int(currentTile.X, currentTile.Y);
+                        foreach (var block in SelectedBlocks)
+                        {
+                            var chunk = block.GetChunk().chunkObject;
+                            block.RebuildVoxels(ManagedHeightmaps[tilepos]);
+                            chunk.transform.position += new Vector3(0, 1, 0);
+                        }
+                    }
+
+
+                }
+
+                if (heightmaps.Count < 1)
+                {
+                    //initialize new heightmap
+                    Vector2Int tilepos = new Vector2Int(currentTile.X, currentTile.Y);
+                    NativeArray<float> currentHeightmap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
+                    heightmaps.Add(currentHeightmap);
+                    Debug.Log("heightmap initialized");
+                }
+
+                // Debug.Log(SelectedBlocks.Count);
+            }
+            else
+            {
+                if (SelectedBlocks.Count > 1)
+                {
                     foreach (var block in SelectedBlocks)
                     {
                         var chunk = block.GetChunk().chunkObject;
-                        chunk.transform.position += new Vector3(0, 1, 0);
+                        block.UnloadVoxels();
+                        chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+
                     }
+                    SelectedBlocks.Clear();
                 }
 
-
+                if (heightmaps.Count > 0)
+                {
+                    foreach (var heightmap in heightmaps)
+                    {
+                        heightmap.Dispose();
+                    }
+                    heightmaps.Clear();
+                    Debug.Log("heightmap disposed");
+                }
             }
-
-            // Debug.Log(SelectedBlocks.Count);
         }
+
     }
 
     //async operations
@@ -456,36 +542,39 @@ public class VoxelGenerator : MonoBehaviour
         }
 
         //test voxeldata
-        var blcks = tiles[0, 0].GetBlocks();
-        List<Vector3Int> modified = new List<Vector3Int>();
-        for (int i = 0; i < 500; i++)
-        {
-            for (int j = 0; j < 5; j++)
-            {
-                Vector3Int mod = new Vector3Int(10 + j, 1000 + i, 10);
-                modified.Add(mod);
+        //var blcks = tiles[0, 0].GetBlocks();
+        //List<Vector3Int> modified = new List<Vector3Int>();
+        //for (int i = 0; i < 500; i++)
+        //{
+        //    for (int j = 0; j < 5; j++)
+        //    {
+        //        Vector3Int mod = new Vector3Int(10 + j, 1000 + i, 10);
+        //        modified.Add(mod);
 
-            }
-        }
+        //    }
+        //}
 
-        terrainData = new WorldData.TerrainData
-        {
-            CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
-            EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
-            TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
-        };
+        //terrainData = new WorldData.TerrainData
+        //{
+        //    CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
+        //    EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
+        //    TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
+        //};
 
-        blcks[0].RebuildVoxels(ManagedHeightmaps[new Vector2Int(0, 0)], modified, new Unity.Mathematics.half(1.0f));
-        blcks[0].RebuildMesh(terrainData);
+        //blcks[0].RebuildVoxels(ManagedHeightmaps[new Vector2Int(0, 0)]);
+        //blcks[0].ModifyVoxels(modified, new Unity.Mathematics.half(1.0f));
+        //blcks[0].RebuildMesh(terrainData);
 
-        terrainData.DisposeAll();
+        //terrainData.DisposeAll();
 
         //set current voxels to be displayed
-        //  CurrentvoxelData = blcks[0].GetVoxelData();
-        currentVoxelHeight = Mathf.FloorToInt(blcks[0].MaxHeight + 1);
-        currentVoxelWidth = blcks[0].Width + 1;
-        currentVoxelPos = blcks[0].GetPosition();
+        ////  CurrentvoxelData = blcks[0].GetVoxelData();
+        //currentVoxelHeight = Mathf.FloorToInt(blcks[0].MaxHeight + 1);
+        //currentVoxelWidth = blcks[0].Width + 1;
+        //currentVoxelPos = blcks[0].GetPosition();
         //  Debug.Log($"voxel length: {CurrentvoxelData.Length} height: {currentVoxelHeight} width: {currentVoxelWidth}");
+
+
     }
 
     IEnumerator cacheHeightMaps()
@@ -519,7 +608,7 @@ public class VoxelGenerator : MonoBehaviour
         Resources.UnloadUnusedAssets();
 
         int numElements = (heightmap.Length * (maxXTiles * maxZTiles));
-        Constants.CalcMemory<float>(numElements);
+        // Constants.CalcMemory<float>(numElements);
         Debug.Log("Done Caching. total bytes: ");
         // yield return new WaitForSeconds(3);
         StartCoroutine(InitializeWorld());
@@ -541,6 +630,8 @@ public class VoxelGenerator : MonoBehaviour
         }
         heightmaps.Clear();
         //  Profiler.EndSample();
+
+        worldInitialized = true;
     }
 
     IEnumerator UpdateMeshAsync(Vector2Int tilepos)
@@ -559,9 +650,13 @@ public class VoxelGenerator : MonoBehaviour
             lockinteracting = true;
             interactEnabled = false;
         }
+        Profiler.BeginSample("test_copy heightmap");
+       
+        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].Count,allocator: Allocator.Persistent);
+        currentMap.CopyFrom(ManagedHeightmaps[tilepos].ToArray());
+        
 
-        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].ToArray(), allocator: Allocator.Persistent);
-
+        Profiler.EndSample();
 
         var blocks = tiles[tilepos.x, tilepos.y].GetBlocks();
         int numLoaded = blocks.Count(x => x.Loaded == true);
@@ -735,7 +830,6 @@ public class VoxelGenerator : MonoBehaviour
         Profiler.EndSample();
         return filledBlocks;
     }
-
     List<Block> DividePosition(Vector2 center, float width, float height, int divisions, Vector2 playerpos)
     {
         List<Block> tempblocks = new List<Block>();
@@ -956,6 +1050,38 @@ public class VoxelGenerator : MonoBehaviour
         return blocksUpdated;
     }
 
+    //voxel manipulation
+    public void RemoveSquare(Vector3 pos, int squarePos)
+    {
+        var currentTile = GetTile(pos);
+        List<Block> modifiedBlocks = new List<Block>();
+        Debug.Log($"trying pos: {pos}");
+        if (currentTile != null)
+        {
+           var blocks = currentTile.GetBlocks(pos, 32);
+
+            Vector3 minPos = pos - new Vector3(squarePos, squarePos, squarePos);
+            Vector3 maxPos = pos + new Vector3(squarePos, squarePos, squarePos);
+
+            if(blocks == null)
+            {
+                Debug.LogError($"blocks not found: pos {pos}");
+                return; 
+            }
+
+            for (float x = minPos.x; x <= maxPos.x; x++)
+            {
+                for (float z = minPos.z; z < maxPos.z; z++)
+                {
+                    var currentpos = new Vector2(x, z);
+                   // Debug.Log($"pos: {currentpos}");
+                    modifiedBlocks = blocks.Where(block => Vector2.Distance(currentpos,new Vector2(block.X,block.Y) ) <= block.Width).ToList();
+                }
+            }
+            Debug.Log($"blocks to be modified: {modifiedBlocks.Count}");
+            modifiedBlocks.Clear();
+        }
+    }
 
     //initialization
     void initTiles()

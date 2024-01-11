@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Entities.UniversalDelegates;
 //using Unity.Entities.UniversalDelegates;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -35,12 +36,13 @@ public class Block
     JobHandle combinedHandle;
     int offsetX;
     int offsetY;
+    bool voxelsDisposed = false;
     public Block(int _width, Vector2Int tilepos, int x, int y)
     {
         this.Width = _width;
         this.X = x;
         this.Y = y;
-        
+
     }
 
     public Vector2 GetPosition()
@@ -118,7 +120,8 @@ public class Block
         //{
         //    return;
         //}
-
+        Unity.Mathematics.Random randomGen = new Unity.Mathematics.Random((uint)UnityEngine.Random.Range(1, 100000));
+        float4 randCol = randomGen.NextFloat4(0,1);
 
         //calc offset
         offsetX = (X - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
@@ -175,7 +178,7 @@ public class Block
 
         Profiler.BeginSample("test_marchingcube");
 
-
+       
         MarchingCube_Job Meshjob = new MarchingCube_Job()
         {
             TerrainData = terrainData,
@@ -189,7 +192,7 @@ public class Block
             width = Width,
 
             vertices = TempVertices.AsParallelWriter(),
-
+            randcol = randCol
 
 
         };
@@ -221,7 +224,7 @@ public class Block
         combinedJobs.Complete();
         TempVertices.Dispose();
 
-        
+
 
         SetMesh();
         Loaded = true;
@@ -233,9 +236,10 @@ public class Block
 
     }
 
-    public void RebuildVoxels(List<float> heightMap, List<Vector3Int> modifiedVoxels, half direction)
+    public void RebuildVoxels(List<float> heightMap)
     {
-
+        Profiler.BeginSample("test_initVariables");
+        voxelsDisposed = false;
         float chunkWidth = (float)Width / Constants.minChunkWidth;
         int voxel_Size = Mathf.RoundToInt(Mathf.Clamp(chunkWidth * Constants.minVoxelSize, 1, 256));
 
@@ -244,12 +248,13 @@ public class Block
         int zVoxels = xVoxels;
         int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
+        Profiler.EndSample();
 
+        Profiler.BeginSample("test_init nativearrays");
         NativeArray<float> nativeHeightMap = new NativeArray<float>(heightMap.ToArray(), allocator: Allocator.TempJob);
-        NativeArray<Vector3Int> modified = new NativeArray<Vector3Int>(modifiedVoxels.ToArray(), allocator: Allocator.TempJob);
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
 
-
+        Profiler.BeginSample("test_rebuildvoxels");
         GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
         {
             offsetX = offsetY,
@@ -265,6 +270,24 @@ public class Block
         };
         var initVoxels = voxelStructure_Job.Schedule(totalVoxels, 64);
 
+        initVoxels.Complete();
+        nativeHeightMap.Dispose();
+        Profiler.EndSample();
+        // Debug.Log($"voxels initialized {voxelData.Length}");
+    }
+
+    public void ModifyVoxels(List<Vector3Int> modifiedVoxels, half direction)
+    {
+        float chunkWidth = (float)Width / Constants.minChunkWidth;
+        int voxel_Size = Mathf.RoundToInt(Mathf.Clamp(chunkWidth * Constants.minVoxelSize, 1, 256));
+
+        //Set voxelSize
+        int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
+        int zVoxels = xVoxels;
+        int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
+        int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
+
+        NativeArray<Vector3Int> modified = new NativeArray<Vector3Int>(modifiedVoxels.ToArray(), allocator: Allocator.TempJob);
 
         ModifyVoxelStructure_job modifyJob = new ModifyVoxelStructure_job
         {
@@ -277,13 +300,10 @@ public class Block
 
         };
 
-        var modifyHandle = modifyJob.Schedule(modified.Length, 64, initVoxels);
+        var modifyHandle = modifyJob.Schedule(modified.Length, 64);
         modifyHandle.Complete();
-        Debug.Log(voxelData.Length);
-        nativeHeightMap.Dispose();
         modified.Dispose();
     }
-
     public void RebuildMesh(WorldData.TerrainData terrainData)
     {
 
@@ -341,6 +361,16 @@ public class Block
         Loaded = true;
     }
 
+    public void UnloadVoxels()
+    {
+        if (!voxelsDisposed)
+        {
+            voxelData.Dispose();
+            voxelsDisposed = true;
+        }
+        Debug.Log("voxels disposed");
+    }
+
     public void SetMesh()
     {
         //set mesh
@@ -360,7 +390,7 @@ public class Block
         nativeTriangles.Dispose();
         voxelData.Dispose();
 
-       
+
 
         //add mesh to gameobject
         GameObject go = new GameObject();
@@ -568,14 +598,14 @@ public class Block
 
         [ReadOnly]
         public float surfaceDensity;
-
+        public float4 randcol;
 
         public void Execute(int index)
         {
             int x = Mathf.FloorToInt(index % voxelWidth);
             int y = Mathf.FloorToInt((index / voxelWidth) % voxelHeight);
             int z = Mathf.FloorToInt(index / (voxelWidth * voxelHeight));
-
+            
             // Calculate the position of the voxel in world space
             Vector3 voxelPosition = new Vector3(
                 x * voxelSize,
@@ -674,21 +704,26 @@ public class Block
 
                     //calculate the point along the edge that passes through
                     vertexPosition = vert1 + ((vert2 - vert1) * diff);
-
+                  
+                   
+                    
                     if (j == 0)
                     {
                         triangle.a = vertexPosition;
                         triangle.col_a = ColorSample(diff);
+                        triangle.col_a = randcol;
                     }
                     else if (j == 1)
                     {
                         triangle.b = vertexPosition;
                         triangle.col_b = ColorSample(diff);
+                        triangle.col_b = randcol;
                     }
                     else if (j == 2)
                     {
                         triangle.c = vertexPosition;
                         triangle.col_c = ColorSample(diff);
+                        triangle.col_c = randcol;
                     }
 
                     edgeIndex++;
@@ -724,11 +759,12 @@ public class Block
 
         float4 ColorSample(float sample)
         {
-
+            
             switch (sample)
             {
                 case >= 0f:
                     return new float4(1, 0, 0, 0);
+
                 case < 5.0f:
                     return new float4(0, 1, 0, 0);
                 //case < -5f:

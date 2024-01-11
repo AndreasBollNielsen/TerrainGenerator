@@ -97,6 +97,7 @@ public class TerrainTile
     {
         var originblock = GetBlock(origin);
         var sortedBlocks = blocks.Where(x => x.Width < 32).ToList();
+        
         if (sortedBlocks != null && originblock != null)
         {
             if(originblock == null)
@@ -128,7 +129,7 @@ public class TerrainTile
             // Debug.Log("returning block");
             return block;
         }
-        // Debug.LogError("block not found");
+         Debug.LogError($"block not found {pos}");
         return null;
     }
 
