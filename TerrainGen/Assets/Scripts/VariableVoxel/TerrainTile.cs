@@ -96,6 +96,7 @@ public class TerrainTile
     public List<Block> GetBlocks(Vector3 origin, float radius)
     {
         var originblock = GetBlock(origin);
+        Debug.Log(originblock.GetChunk().GetChunkPos());
         var sortedBlocks = blocks.Where(x => x.Width < 32).ToList();
         
         if (sortedBlocks != null && originblock != null)
@@ -120,10 +121,15 @@ public class TerrainTile
     public Block GetBlock(Vector3 pos)
     {
         int blockWidth = 16;
-        //int blockX = Mathf.FloorToInt(pos.x / blockWidth) * blockWidth;
-        //int blockY = Mathf.FloorToInt(pos.z / blockWidth) * blockWidth;
-        // Debug.Log($"pos: {blockX} {blockY}");
-        Block block = blocks.Where(block => Vector2.Distance(new Vector2(pos.x, pos.z), new Vector2(block.X, block.Y)) <= blockWidth / 2).FirstOrDefault();
+
+        int blockX = Mathf.FloorToInt(pos.x  / blockWidth) * blockWidth ;
+        int blockY = Mathf.FloorToInt(pos.z  / blockWidth) * blockWidth;
+        //blockX += blockWidth;
+        //blockY += blockWidth;
+        Block block = blocks.Where (x => x.GetChunk().GetChunkPos().x == blockX  && x.GetChunk().GetChunkPos().z == blockY).FirstOrDefault();
+       //  Debug.Log($"pos: {blockX} {blockY} ");
+       // Debug.Log($"blockpos: {testblock.X}:{testblock.Y} obj: {testblock.GetChunk().chunkObject.transform.position}");
+       // Block block = blocks.Where(block => Vector2.Distance(new Vector2(pos.x, pos.z), new Vector2(block.X, block.Y)) <= blockWidth / 2).FirstOrDefault();
         if (block != null)
         {
             // Debug.Log("returning block");

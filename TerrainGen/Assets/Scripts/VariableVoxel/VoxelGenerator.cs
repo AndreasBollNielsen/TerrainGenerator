@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.VisualScripting;
@@ -651,10 +652,10 @@ public class VoxelGenerator : MonoBehaviour
             interactEnabled = false;
         }
         Profiler.BeginSample("test_copy heightmap");
-       
-        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].Count,allocator: Allocator.Persistent);
+
+        NativeArray<float> currentMap = new NativeArray<float>(ManagedHeightmaps[tilepos].Count, allocator: Allocator.Persistent);
         currentMap.CopyFrom(ManagedHeightmaps[tilepos].ToArray());
-        
+
 
         Profiler.EndSample();
 
@@ -1058,27 +1059,99 @@ public class VoxelGenerator : MonoBehaviour
         Debug.Log($"trying pos: {pos}");
         if (currentTile != null)
         {
-           var blocks = currentTile.GetBlocks(pos, 32);
+            var blocks = currentTile.GetBlocks(pos, 30);
 
-            Vector3 minPos = pos - new Vector3(squarePos, squarePos, squarePos);
-            Vector3 maxPos = pos + new Vector3(squarePos, squarePos, squarePos);
+            float fragsquare = squarePos / 2;
 
-            if(blocks == null)
+            Vector3 minPos = pos - new Vector3(fragsquare, fragsquare, fragsquare);
+            Vector3 maxPos = pos + new Vector3(fragsquare, fragsquare, fragsquare);
+
+            int minX = Mathf.FloorToInt(minPos.x);
+            int minY = Mathf.FloorToInt(minPos.y);
+            int minZ = Mathf.FloorToInt(minPos.z);
+
+            int maxX = Mathf.CeilToInt(maxPos.x);
+            int maxY = Mathf.CeilToInt(maxPos.y);
+            int maxZ = Mathf.CeilToInt(maxPos.z);
+
+            if (blocks == null)
             {
                 Debug.LogError($"blocks not found: pos {pos}");
-                return; 
+                return;
+            }
+            bool outofReach = false;
+            List<modifiedBlock> blocksUpdated = new List<modifiedBlock>();
+            foreach (var block in SelectedBlocks)
+            {
+                var blockpos = new Vector2(block.GetChunk().GetChunkPos().x, block.GetChunk().GetChunkPos().z);
+                //reset flag
+                if (outofReach)
+                {
+                    outofReach = false;
+                }
+                modifiedBlock modifiedBlock = new modifiedBlock() { block = block };
+
+                for (int x = minX; x <= maxX; x++)
+                {
+                    for (int y = minY; y <= maxY; y++)
+                    {
+                        for (int z = minZ; z <= maxZ; z++)
+                        {
+
+
+                            var currentpos = new Vector2(x, z);
+                            float minDist = Vector2.Distance(currentpos, blockpos);
+                            // Debug.Log($"current: {currentpos} blockpos: {blockpos} dist: {minDist}");
+                            if (minDist > (block.Width / 2) + squarePos)
+                            {
+                                // Debug.Log($"out of reach {minDist}");
+                                outofReach = true;
+                                break;
+                            }
+                            else
+                            {
+
+                                //Vector3 voxelpoint =  new Vector3(Mathf.RoundToInt(x), Mathf.RoundToInt(y), Mathf.RoundToInt(z)) - block.GetChunk().GetChunkPos();
+                                Vector3 voxelpoint =  new Vector3(x, y, z) + block.GetChunk().GetChunkPos();
+                                 voxelpoint -= block.GetChunk().GetChunkPos();
+                                
+                                Debug.Log($"current: {currentpos} voxel pos: {voxelpoint} chunk: {block.GetChunk().GetChunkPos()}");
+                                modifiedBlock.modifiedPoints.Add(voxelpoint);
+
+                            }
+
+
+                        }
+
+                        if (outofReach) break;
+                    }
+
+                    if (outofReach) break;
+                }
+
+
+                if (modifiedBlock.modifiedPoints.Count > 0)
+                {
+                    Debug.Log($"added block {blockpos}");
+                    blocksUpdated.Add(modifiedBlock);
+                }
+
+
+
+
             }
 
-            for (float x = minPos.x; x <= maxPos.x; x++)
+
+            Debug.Log($"blocks to be modified: {blocksUpdated.Count}");
+            for (int i = 0; i < blocksUpdated.Count; i++)
             {
-                for (float z = minPos.z; z < maxPos.z; z++)
+                Debug.Log($"num points: {blocksUpdated[i].modifiedPoints.Count}");
+                for (int j = 0; j < blocksUpdated[i].modifiedPoints.Count; j++)
                 {
-                    var currentpos = new Vector2(x, z);
-                   // Debug.Log($"pos: {currentpos}");
-                    modifiedBlocks = blocks.Where(block => Vector2.Distance(currentpos,new Vector2(block.X,block.Y) ) <= block.Width).ToList();
+                 //   Debug.Log($"normalized positions: {blocksUpdated[i].modifiedPoints[j]}");
+
                 }
             }
-            Debug.Log($"blocks to be modified: {modifiedBlocks.Count}");
             modifiedBlocks.Clear();
         }
     }
@@ -1488,5 +1561,16 @@ public class ScheduledBlock
     {
         blockIds = new List<int>();
         jobHandles = new NativeArray<JobHandle>(arraySize, allocator: Allocator.Persistent);
+    }
+}
+
+public class modifiedBlock
+{
+    public Block block;
+    public List<Vector3> modifiedPoints;
+
+    public modifiedBlock()
+    {
+        modifiedPoints = new List<Vector3>();
     }
 }

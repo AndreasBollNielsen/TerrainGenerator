@@ -23,6 +23,10 @@ public class Chunk_v
         border = new List<int>();
     }
 
+    public Vector3 GetChunkPos()
+    {
+        return chunkObject.transform.position;
+    }
     public void CopyEdges(List<int> top, List<int> bottom, List<int> left, List<int> right)
     {
         topEdge = new List<int>(top);

@@ -37,10 +37,10 @@ public class TerrainInteraction : MonoBehaviour
         {
             Vector3 gridpos = GetNearestGridPosition(hit.point);
             graphicsPos = gridpos;
-            
+            int squareSize = 3;
             //draw a cube
             Matrix4x4 matrix = new Matrix4x4();
-            matrix.SetTRS(graphicsPos, Quaternion.identity, Vector3.one*3);
+            matrix.SetTRS(graphicsPos, Quaternion.identity, Vector3.one* squareSize);
             Graphics.DrawMesh(graphics, matrix, mat, 0, cam, 0, null, false, false);
 
             if (Input.GetMouseButtonDown(0))
@@ -60,7 +60,7 @@ public class TerrainInteraction : MonoBehaviour
                 if (Physics.Raycast(rayOrigin, cam.transform.forward, out hit))
                 {
                    // WorldGenerator.Instance.GetChunk(hit.transform.position).RemoveSquare(gridpos, 3);
-                    VoxelGenerator.Instance.RemoveSquare(gridpos, 3);
+                    VoxelGenerator.Instance.RemoveSquare(gridpos, squareSize);
                 }
             }
         }
