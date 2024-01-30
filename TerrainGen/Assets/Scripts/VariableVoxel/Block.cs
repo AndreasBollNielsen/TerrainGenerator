@@ -121,7 +121,7 @@ public class Block
         //    return;
         //}
         Unity.Mathematics.Random randomGen = new Unity.Mathematics.Random((uint)UnityEngine.Random.Range(1, 100000));
-        float4 randCol = randomGen.NextFloat4(0,1);
+        float4 randCol = randomGen.NextFloat4(0, 1);
 
         //calc offset
         offsetX = (X - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
@@ -178,7 +178,7 @@ public class Block
 
         Profiler.BeginSample("test_marchingcube");
 
-       
+
         MarchingCube_Job Meshjob = new MarchingCube_Job()
         {
             TerrainData = terrainData,
@@ -227,6 +227,7 @@ public class Block
 
 
         SetMesh();
+        UnloadVoxels();
         Loaded = true;
 
 
@@ -304,9 +305,9 @@ public class Block
         modifyHandle.Complete();
         modified.Dispose();
     }
-    public void RebuildMesh(WorldData.TerrainData terrainData)
+    public void RebuildMesh(WorldData.TerrainData terrainData,GameObject oldChunk)
     {
-
+        Debug.Log("rebuilding mesh");
         nativeVertices = new NativeList<Vector3>(2500, allocator: Allocator.TempJob);
         NativeList<Triangle> TempVertices = new NativeList<Triangle>(9000, allocator: Allocator.TempJob);
         nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
@@ -333,14 +334,14 @@ public class Block
             width = Width,
 
             vertices = TempVertices.AsParallelWriter(),
-
+            randcol = new float4(1, 1, 1, 1),
 
 
         };
 
         JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 64);
         meshhandle.Complete();
-
+        Debug.Log("marching cube done");
         ProcessVertices vertexJob = new ProcessVertices()
         {
             Tempvertices = nativeVertices,
@@ -354,11 +355,14 @@ public class Block
 
         JobHandle combinedJobs = JobHandle.CombineDependencies(meshhandle, vertexHandle);
         combinedHandle = combinedJobs;
-
         combinedJobs.Complete();
+        Debug.Log("vertex job complete");
         TempVertices.Dispose();
+
         SetMesh();
         Loaded = true;
+        Debug.Log("mesh generated");
+        VoxelGenerator.Instance.DestroyOldChunk(oldChunk);
     }
 
     public void UnloadVoxels()
@@ -367,8 +371,9 @@ public class Block
         {
             voxelData.Dispose();
             voxelsDisposed = true;
+
         }
-        Debug.Log("voxels disposed");
+       // Debug.Log("voxels disposed");
     }
 
     public void SetMesh()
@@ -388,7 +393,7 @@ public class Block
         colors.Dispose();
         nativeVertices.Dispose();
         nativeTriangles.Dispose();
-        voxelData.Dispose();
+
 
 
 
@@ -560,11 +565,11 @@ public class Block
             int x = Mathf.FloorToInt(voxelpos.x / voxelSize);
             int y = Mathf.FloorToInt(voxelpos.y / voxelSize);
             int z = Mathf.FloorToInt(voxelpos.z / voxelSize);
-
             int voxelsWidth = voxelWidth;
             int voxelsHeight = voxelHeight;
 
             int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
+          //  Debug.Log($"index: {voxelIndex} length {voxelData.Length}");
             if (voxelIndex < voxelData.Length)
             {
 
@@ -605,7 +610,7 @@ public class Block
             int x = Mathf.FloorToInt(index % voxelWidth);
             int y = Mathf.FloorToInt((index / voxelWidth) % voxelHeight);
             int z = Mathf.FloorToInt(index / (voxelWidth * voxelHeight));
-            
+
             // Calculate the position of the voxel in world space
             Vector3 voxelPosition = new Vector3(
                 x * voxelSize,
@@ -704,9 +709,9 @@ public class Block
 
                     //calculate the point along the edge that passes through
                     vertexPosition = vert1 + ((vert2 - vert1) * diff);
-                  
-                   
-                    
+
+
+
                     if (j == 0)
                     {
                         triangle.a = vertexPosition;
@@ -759,7 +764,7 @@ public class Block
 
         float4 ColorSample(float sample)
         {
-            
+
             switch (sample)
             {
                 case >= 0f:

@@ -95,8 +95,8 @@ public class TerrainTile
 
     public List<Block> GetBlocks(Vector3 origin, float radius)
     {
+       
         var originblock = GetBlock(origin);
-        Debug.Log(originblock.GetChunk().GetChunkPos());
         var sortedBlocks = blocks.Where(x => x.Width < 32).ToList();
         
         if (sortedBlocks != null && originblock != null)

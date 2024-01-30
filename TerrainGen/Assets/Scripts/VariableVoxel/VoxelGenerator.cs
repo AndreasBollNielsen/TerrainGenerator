@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Unity.Collections;
+using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 using Unity.VisualScripting;
 using UnityEditor.Rendering;
 using UnityEngine;
@@ -274,7 +276,7 @@ public class VoxelGenerator : MonoBehaviour
                     {
                         var chunk = block.GetChunk().chunkObject;
                         block.UnloadVoxels();
-                        chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+                        // chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
                     }
                     SelectedBlocks.Clear();
 
@@ -300,7 +302,7 @@ public class VoxelGenerator : MonoBehaviour
                     {
                         var chunk = block.GetChunk().chunkObject;
                         block.UnloadVoxels();
-                        chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+                        // chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
 
                     }
                     SelectedBlocks.Clear();
@@ -388,7 +390,7 @@ public class VoxelGenerator : MonoBehaviour
                         {
                             var chunk = block.GetChunk().chunkObject;
                             block.RebuildVoxels(ManagedHeightmaps[tilepos]);
-                            chunk.transform.position += new Vector3(0, 1, 0);
+                            //  chunk.transform.position += new Vector3(0, 1, 0);
                         }
                     }
 
@@ -414,7 +416,7 @@ public class VoxelGenerator : MonoBehaviour
                     {
                         var chunk = block.GetChunk().chunkObject;
                         block.UnloadVoxels();
-                        chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
+                        // chunk.transform.position = new Vector3(chunk.transform.position.x, 0, chunk.transform.position.z);
 
                     }
                     SelectedBlocks.Clear();
@@ -464,7 +466,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-                // numblocks = 4;
+                // numblocks = 10;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;
@@ -1052,16 +1054,17 @@ public class VoxelGenerator : MonoBehaviour
     }
 
     //voxel manipulation
-    public void RemoveSquare(Vector3 pos, int squarePos)
+    public void RemoveSquare(Vector3 pos, int squareSize)
     {
         var currentTile = GetTile(pos);
         List<Block> modifiedBlocks = new List<Block>();
-        Debug.Log($"trying pos: {pos}");
+        WorldData.TerrainData terrainData;
         if (currentTile != null)
         {
-            var blocks = currentTile.GetBlocks(pos, 30);
+            Debug.Log($"trying pos: {pos}");
+            var blocks = currentTile.GetBlocks(pos, squareSize);
 
-            float fragsquare = squarePos / 2;
+            float fragsquare = squareSize / 2;
 
             Vector3 minPos = pos - new Vector3(fragsquare, fragsquare, fragsquare);
             Vector3 maxPos = pos + new Vector3(fragsquare, fragsquare, fragsquare);
@@ -1081,78 +1084,124 @@ public class VoxelGenerator : MonoBehaviour
             }
             bool outofReach = false;
             List<modifiedBlock> blocksUpdated = new List<modifiedBlock>();
-            foreach (var block in SelectedBlocks)
-            {
-                var blockpos = new Vector2(block.GetChunk().GetChunkPos().x, block.GetChunk().GetChunkPos().z);
-                //reset flag
-                if (outofReach)
-                {
-                    outofReach = false;
-                }
-                modifiedBlock modifiedBlock = new modifiedBlock() { block = block };
+            int blockid = 0;
 
-                for (int x = minX; x <= maxX; x++)
+            //instantiate new terraindata
+            terrainData = new WorldData.TerrainData
+            {
+                CornerTable = new NativeArray<Vector3Int>(WorldData.CornerTable, allocator: Allocator.Persistent),
+                EdgeIndexes = new NativeArray<int>(WorldData.EdgeIndexes_1D, Allocator.Persistent),
+                TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
+            };
+
+
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int y = minY; y <= maxY; y++)
                 {
-                    for (int y = minY; y <= maxY; y++)
+                    for (int z = minZ; z <= maxZ; z++)
                     {
-                        for (int z = minZ; z <= maxZ; z++)
+                        var currentpos = new Vector2(x, z);
+
+                        // var foundBlocks = SelectedBlocks.Where(x => Vector2.Distance(x.GetPosition(), currentpos) <= x.Width / 2f).FirstOrDefault();
+                        var foundBlocks = GetNearestBlock(currentpos);
+                        if (foundBlocks != null)
                         {
 
+                            // Calculate block coordinates
+                            float blockX = (float)Math.Floor(currentpos.x / 16);
+                            float blockY = (float)Math.Floor(currentpos.y / 16);
 
-                            var currentpos = new Vector2(x, z);
-                            float minDist = Vector2.Distance(currentpos, blockpos);
-                            // Debug.Log($"current: {currentpos} blockpos: {blockpos} dist: {minDist}");
-                            if (minDist > (block.Width / 2) + squarePos)
+                            // Calculate the normalized coordinates within the block
+                            float normalizedX = currentpos.x - (blockX * 16);
+                            // float normalizedY = y;
+                            float normalizedZ = currentpos.y - (blockY * 16);
+
+                            // Create a new normalized vector
+                            Vector3Int normalizedPosition = new Vector3Int(Mathf.FloorToInt(normalizedX), Mathf.FloorToInt(y), Mathf.FloorToInt(normalizedZ));
+
+
+                            var blockpos = foundBlocks.GetPosition();
+
+
+                            // Use LINQ to find the index of the object with the specific Vector2
+                            int existingObjectIndex = blocksUpdated.FindIndex(obj =>
+                                obj.block.X == blockpos.x && obj.block.Y == blockpos.y);
+
+                            if (existingObjectIndex != -1)
                             {
-                                // Debug.Log($"out of reach {minDist}");
-                                outofReach = true;
-                                break;
+                                blocksUpdated[existingObjectIndex].modifiedPoints.Add(normalizedPosition);
                             }
                             else
                             {
-
-                                //Vector3 voxelpoint =  new Vector3(Mathf.RoundToInt(x), Mathf.RoundToInt(y), Mathf.RoundToInt(z)) - block.GetChunk().GetChunkPos();
-                                Vector3 voxelpoint =  new Vector3(x, y, z) + block.GetChunk().GetChunkPos();
-                                 voxelpoint -= block.GetChunk().GetChunkPos();
-                                
-                                Debug.Log($"current: {currentpos} voxel pos: {voxelpoint} chunk: {block.GetChunk().GetChunkPos()}");
-                                modifiedBlock.modifiedPoints.Add(voxelpoint);
+                                modifiedBlock modifiedBlock = new modifiedBlock() { block = foundBlocks };
+                                modifiedBlock.modifiedPoints.Add(normalizedPosition);
+                                blocksUpdated.Add(modifiedBlock);
 
                             }
+
 
 
                         }
 
-                        if (outofReach) break;
+
+
                     }
-
-                    if (outofReach) break;
-                }
-
-
-                if (modifiedBlock.modifiedPoints.Count > 0)
-                {
-                    Debug.Log($"added block {blockpos}");
-                    blocksUpdated.Add(modifiedBlock);
                 }
 
 
 
+                if (outofReach) break;
 
+
+                if (outofReach) break;
             }
 
 
-            Debug.Log($"blocks to be modified: {blocksUpdated.Count}");
+
+
+
+
+              Debug.Log($"blocks to be modified: {blocksUpdated.Count}");
+           
             for (int i = 0; i < blocksUpdated.Count; i++)
             {
-                Debug.Log($"num points: {blocksUpdated[i].modifiedPoints.Count}");
-                for (int j = 0; j < blocksUpdated[i].modifiedPoints.Count; j++)
-                {
-                 //   Debug.Log($"normalized positions: {blocksUpdated[i].modifiedPoints[j]}");
+               // Debug.Log($"num points: {blocksUpdated[i].modifiedPoints.Count}");
+                GameObject oldchunk = blocksUpdated[i].block.GetChunk().chunkObject;
+                blocksUpdated[i].block.ModifyVoxels(blocksUpdated[i].modifiedPoints, (half)1.0);
+                blocksUpdated[i].block.RebuildMesh(terrainData,oldchunk);
+               
+               
+                //for (int j = 0; j < blocksUpdated[i].modifiedPoints.Count; j++)
+                //{
+                //       Debug.Log($"normalized positions: {blocksUpdated[i].modifiedPoints[j]}");
 
-                }
+                //}
             }
+            terrainData.DisposeAll();
             modifiedBlocks.Clear();
+
+           
+        }
+
+        Block GetNearestBlock(Vector2 worldpos)
+        {
+            float snappedX = Mathf.Floor(worldpos.x / 16) * 16;
+            //  float snappedY = Mathf.Round(worldpos.y / 16) * 16;
+            float snappedZ = Mathf.Floor(worldpos.y / 16) * 16;
+            var blockpos = new Vector3(snappedX,0, snappedZ);
+             return SelectedBlocks.Where(x => x.GetChunk().GetChunkPos() == blockpos).FirstOrDefault();
+            //foreach (var block in SelectedBlocks)
+            //{
+            //    var pos = block.GetChunk().GetChunkPos();
+            //    if (pos.x == blockpos.x && pos.z == blockpos.y)
+            //    {
+            //        Debug.Log($"current blockpos {pos} cubepos {blockpos}");
+
+            //    }
+
+            //}
+           // return null;
         }
     }
 
@@ -1277,6 +1326,17 @@ public class VoxelGenerator : MonoBehaviour
             return -1;
         }
         return voxelData[voxelIndex].DistanceToSurface;
+    }
+
+    public void DestroyOldChunk(GameObject chunk)
+    {
+        Debug.Log("ready to destroy");
+        StartCoroutine(RemovechunkDelayed(chunk));
+    }
+    IEnumerator RemovechunkDelayed(GameObject chunk)
+    {
+        yield return new WaitForEndOfFrame();
+        Destroy(chunk);
     }
 
     #region Deprecated code
@@ -1567,10 +1627,10 @@ public class ScheduledBlock
 public class modifiedBlock
 {
     public Block block;
-    public List<Vector3> modifiedPoints;
+    public List<Vector3Int> modifiedPoints;
 
     public modifiedBlock()
     {
-        modifiedPoints = new List<Vector3>();
+        modifiedPoints = new List<Vector3Int>();
     }
 }
