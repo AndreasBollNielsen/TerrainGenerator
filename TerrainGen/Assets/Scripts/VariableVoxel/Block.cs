@@ -287,7 +287,7 @@ public class Block
         int zVoxels = xVoxels;
         int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
-
+       
         NativeArray<Vector3Int> modified = new NativeArray<Vector3Int>(modifiedVoxels.ToArray(), allocator: Allocator.TempJob);
 
         ModifyVoxelStructure_job modifyJob = new ModifyVoxelStructure_job
@@ -296,8 +296,8 @@ public class Block
             voxelData = voxelData,
             modifiedVoxels = modified,
             voxelSize = voxel_Size,
-            voxelHeight = yVoxels + 1,
-            voxelWidth = xVoxels + 1
+            voxelHeight = yVoxels + 1 ,
+            voxelWidth = xVoxels + 1 
 
         };
 
@@ -569,7 +569,7 @@ public class Block
             int voxelsHeight = voxelHeight;
 
             int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
-          //  Debug.Log($"index: {voxelIndex} length {voxelData.Length}");
+            Debug.Log($"voxelpos: {x}:{y}:{z} voxeindex: {voxelIndex} voxel length: { voxelData.Length}");
             if (voxelIndex < voxelData.Length)
             {
 

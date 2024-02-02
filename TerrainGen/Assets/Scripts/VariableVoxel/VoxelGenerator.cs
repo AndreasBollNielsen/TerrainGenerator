@@ -466,7 +466,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-                // numblocks = 10;
+               // numblocks = 10;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;
@@ -1094,6 +1094,7 @@ public class VoxelGenerator : MonoBehaviour
                 TriangleTable = new NativeArray<int>(WorldData.TriangleTable_1D, Allocator.Persistent),
             };
 
+            float with = 16;
 
             for (int x = minX; x <= maxX; x++)
             {
@@ -1105,22 +1106,21 @@ public class VoxelGenerator : MonoBehaviour
 
                         // var foundBlocks = SelectedBlocks.Where(x => Vector2.Distance(x.GetPosition(), currentpos) <= x.Width / 2f).FirstOrDefault();
                         var foundBlocks = GetNearestBlock(currentpos);
+                        // Calculate block coordinates
+                        float blockX = (float)Math.Floor(currentpos.x / with);
+                        float blockY = (float)Math.Floor(currentpos.y / with);
+
+                        // Calculate the normalized coordinates within the block
+                        float normalizedX = currentpos.x - (blockX * with);
+                        float normalizedZ = currentpos.y - (blockY * with);
+                       
+
+                        // Create a new normalized vector
+                        Vector3Int normalizedPosition = new Vector3Int(Mathf.FloorToInt(normalizedX), Mathf.FloorToInt(y), Mathf.FloorToInt(normalizedZ));
+
+                        Debug.Log($"normalized pos: {normalizedPosition}");
                         if (foundBlocks != null)
                         {
-
-                            // Calculate block coordinates
-                            float blockX = (float)Math.Floor(currentpos.x / 16);
-                            float blockY = (float)Math.Floor(currentpos.y / 16);
-
-                            // Calculate the normalized coordinates within the block
-                            float normalizedX = currentpos.x - (blockX * 16);
-                            // float normalizedY = y;
-                            float normalizedZ = currentpos.y - (blockY * 16);
-
-                            // Create a new normalized vector
-                            Vector3Int normalizedPosition = new Vector3Int(Mathf.FloorToInt(normalizedX), Mathf.FloorToInt(y), Mathf.FloorToInt(normalizedZ));
-
-
                             var blockpos = foundBlocks.GetPosition();
 
 
@@ -1131,12 +1131,39 @@ public class VoxelGenerator : MonoBehaviour
                             if (existingObjectIndex != -1)
                             {
                                 blocksUpdated[existingObjectIndex].modifiedPoints.Add(normalizedPosition);
+
+                                //adding point at edge of chunk-- very bad implementation
+                                if (normalizedPosition.x == 15)
+                                {
+                                    Vector3Int padding = new Vector3Int(16,normalizedPosition.y,normalizedPosition.z);
+                                    blocksUpdated[existingObjectIndex].modifiedPoints.Add(padding);
+                                }
+
+                                if (normalizedPosition.z == 15)
+                                {
+                                    Vector3Int padding = new Vector3Int(normalizedPosition.x, normalizedPosition.y, 16);
+                                    blocksUpdated[existingObjectIndex].modifiedPoints.Add(padding);
+                                }
+
                             }
                             else
                             {
                                 modifiedBlock modifiedBlock = new modifiedBlock() { block = foundBlocks };
                                 modifiedBlock.modifiedPoints.Add(normalizedPosition);
                                 blocksUpdated.Add(modifiedBlock);
+
+                                //adding point at edge of chunk-- very bad implementation
+                                if (normalizedPosition.x == 15)
+                                {
+                                    Vector3Int padding = new Vector3Int(16, normalizedPosition.y, normalizedPosition.z);
+                                    blocksUpdated[blocksUpdated.Count-1].modifiedPoints.Add(padding);
+                                }
+
+                                if (normalizedPosition.z == 15)
+                                {
+                                    Vector3Int padding = new Vector3Int(normalizedPosition.x, normalizedPosition.y, 16);
+                                    blocksUpdated[blocksUpdated.Count - 1].modifiedPoints.Add(padding);
+                                }
 
                             }
 
@@ -1162,16 +1189,16 @@ public class VoxelGenerator : MonoBehaviour
 
 
 
-              Debug.Log($"blocks to be modified: {blocksUpdated.Count}");
-           
+            Debug.Log($"blocks to be modified: {blocksUpdated.Count}");
+
             for (int i = 0; i < blocksUpdated.Count; i++)
             {
-               // Debug.Log($"num points: {blocksUpdated[i].modifiedPoints.Count}");
+                // Debug.Log($"num points: {blocksUpdated[i].modifiedPoints.Count}");
                 GameObject oldchunk = blocksUpdated[i].block.GetChunk().chunkObject;
                 blocksUpdated[i].block.ModifyVoxels(blocksUpdated[i].modifiedPoints, (half)1.0);
-                blocksUpdated[i].block.RebuildMesh(terrainData,oldchunk);
-               
-               
+                blocksUpdated[i].block.RebuildMesh(terrainData, oldchunk);
+
+
                 //for (int j = 0; j < blocksUpdated[i].modifiedPoints.Count; j++)
                 //{
                 //       Debug.Log($"normalized positions: {blocksUpdated[i].modifiedPoints[j]}");
@@ -1181,7 +1208,7 @@ public class VoxelGenerator : MonoBehaviour
             terrainData.DisposeAll();
             modifiedBlocks.Clear();
 
-           
+
         }
 
         Block GetNearestBlock(Vector2 worldpos)
@@ -1189,19 +1216,9 @@ public class VoxelGenerator : MonoBehaviour
             float snappedX = Mathf.Floor(worldpos.x / 16) * 16;
             //  float snappedY = Mathf.Round(worldpos.y / 16) * 16;
             float snappedZ = Mathf.Floor(worldpos.y / 16) * 16;
-            var blockpos = new Vector3(snappedX,0, snappedZ);
-             return SelectedBlocks.Where(x => x.GetChunk().GetChunkPos() == blockpos).FirstOrDefault();
-            //foreach (var block in SelectedBlocks)
-            //{
-            //    var pos = block.GetChunk().GetChunkPos();
-            //    if (pos.x == blockpos.x && pos.z == blockpos.y)
-            //    {
-            //        Debug.Log($"current blockpos {pos} cubepos {blockpos}");
+            var blockpos = new Vector3(snappedX, 0, snappedZ);
+            return SelectedBlocks.Where(x => x.GetChunk().GetChunkPos() == blockpos).FirstOrDefault();
 
-            //    }
-
-            //}
-           // return null;
         }
     }
 

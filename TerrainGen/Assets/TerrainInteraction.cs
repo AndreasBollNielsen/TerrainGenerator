@@ -37,7 +37,7 @@ public class TerrainInteraction : MonoBehaviour
         {
             Vector3 gridpos = GetNearestGridPosition(hit.point);
             graphicsPos = gridpos;
-            int squareSize = 3;
+            int squareSize = 5;
             //draw a cube
             Matrix4x4 matrix = new Matrix4x4();
             matrix.SetTRS(graphicsPos, Quaternion.identity, Vector3.one* squareSize);
