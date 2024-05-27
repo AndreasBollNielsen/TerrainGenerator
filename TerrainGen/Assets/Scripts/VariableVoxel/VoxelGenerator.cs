@@ -55,6 +55,7 @@ public class VoxelGenerator : MonoBehaviour
     TerrainTile[,] tiles;
 
     public Transform player;
+    public ComputeShader computeShader;
     Vector3 lastpos;
     private int lastBlockX;
     private int lastBlockZ;
@@ -476,7 +477,8 @@ public class VoxelGenerator : MonoBehaviour
                 for (int i = 0; i < numblocks; i++)
                 {
                     blocks[i].CalculateHeight(heightmaps[heightmapCounter]);
-                    blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                   // blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                    blocks[i].GenerateMesh_Compute(heightmaps[heightmapCounter], terrainData,computeShader);
                     // blocks[i].testjob(parameters);
                     blocks[i].SetBlockId(i);
                     jobs[i] = blocks[i].GetJob();

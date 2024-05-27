@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Unity.Burst;
 using Unity.Collections;
@@ -14,7 +15,6 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.UIElements;
 using static Block;
-
 using static WorldData;
 
 public class Block
@@ -236,6 +236,155 @@ public class Block
 
 
     }
+    public void GenerateMesh_Compute(NativeArray<float> heightMap, WorldData.TerrainData terrainData, ComputeShader computeShader)
+    {
+
+        Unity.Mathematics.Random randomGen = new Unity.Mathematics.Random((uint)UnityEngine.Random.Range(1, 100000));
+        float4 randCol = randomGen.NextFloat4(0, 1);
+
+        //calc offset
+        offsetX = (X - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
+        offsetY = (Y - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
+
+        //initialize voxelsize
+        float chunkWidth = (float)Width / Constants.minChunkWidth;
+        int voxel_Size = Mathf.RoundToInt(Mathf.Clamp(chunkWidth * Constants.minVoxelSize, 1, 256));
+
+        //Set voxelSize
+        int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
+        int zVoxels = xVoxels;
+
+
+
+        //set total voxel size
+        int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
+        int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
+        //int totalVertices = (xVoxels * 3) * (zVoxels * 3);
+
+        Profiler.BeginSample("test_initialize memory");
+
+
+        voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
+        Vector3[] nativeVertices = new Vector3[2500]; 
+        Triangle[] TempVertices = new Triangle[9000];
+        nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
+        colors = new NativeList<Color>(allocator: Allocator.TempJob);
+
+
+        Profiler.EndSample();
+
+
+        Profiler.BeginSample("test_generateVoxels");
+        GenerateVoxelStructure_Job voxelStructure_Job = new GenerateVoxelStructure_Job()
+        {
+            offsetX = offsetY,
+            offsetZ = offsetX,
+            voxelSize = voxel_Size,
+            heightmapWidth = Constants.heightmapWidth,
+            height = Constants.height,
+            voxelHeight = yVoxels + 1,
+            voxelWidth = xVoxels + 1,
+            voxelData = voxelData,
+            heightMap = heightMap,
+
+        };
+        var voxeljob = voxelStructure_Job.Schedule(totalVoxels, 64);
+        voxeljob.Complete();
+        Profiler.EndSample();
+
+
+
+
+
+        ComputeBuffer voxelDataBuffer = new ComputeBuffer(voxelData.Length, sizeof(float));
+        voxelDataBuffer.SetData(voxelData);
+        ComputeBuffer verticesBuffer = new ComputeBuffer(TempVertices.Length, Marshal.SizeOf(typeof(Triangle)));
+
+        ComputeBuffer triangleTableBuffer = new ComputeBuffer(terrainData.TriangleTable.Length, sizeof(int));
+        triangleTableBuffer.SetData(terrainData.TriangleTable);
+
+        ComputeBuffer cornerTableBuffer = new ComputeBuffer(terrainData.CornerTable.Length, Marshal.SizeOf(typeof(Vector3)));
+        cornerTableBuffer.SetData(terrainData.CornerTable);
+
+        computeShader.SetBuffer(0, "voxelData", voxelDataBuffer);
+        computeShader.SetBuffer(0, "vertices", verticesBuffer);
+        computeShader.SetBuffer(0, "triangleTable", triangleTableBuffer);
+        computeShader.SetBuffer(0, "cornerTable", cornerTableBuffer);
+
+        computeShader.SetInt("voxelWidth", xVoxels);
+        computeShader.SetInt("voxelHeight", yVoxels);
+        computeShader.SetInt("voxelSize", voxel_Size);
+        computeShader.SetInt("voxelArrayLenth", voxelData.Length);
+        computeShader.SetInt("verticesArrayLength", TempVertices.Length);
+        computeShader.SetFloat("width", Width);
+        computeShader.SetFloat("height", Constants.height);
+        computeShader.SetFloat("surfaceDensity", WorldData.surfaceDensity);
+        computeShader.SetVector("randcol", randCol);
+
+        int threadGroupsX = Mathf.CeilToInt(xVoxels / 8.0f);
+        int threadGroupsY = Mathf.CeilToInt(yVoxels / 8.0f);
+        int threadGroupsZ = Mathf.CeilToInt(xVoxels / 8.0f);
+        computeShader.Dispatch(0, threadGroupsX, threadGroupsY, threadGroupsZ);
+        verticesBuffer.GetData(nativeVertices.Length);
+
+        voxelDataBuffer.Release();
+        verticesBuffer.Release();
+        triangleTableBuffer.Release();
+        cornerTableBuffer.Release();
+
+
+        //MarchingCube_Job Meshjob = new MarchingCube_Job()
+        //{
+        //    TerrainData = terrainData,
+        //    voxelData = voxelData,
+        //    voxelSize = voxel_Size,
+        //    voxelWidth = xVoxels,
+        //    voxelHeight = yVoxels,
+        //    height = Constants.height,
+        //    voxelsLength = totalVoxels,
+        //    surfaceDensity = WorldData.surfaceDensity,
+        //    width = Width,
+
+        //    vertices = TempVertices.AsParallelWriter(),
+        //    randcol = randCol
+
+
+        //};
+
+        //JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 64, voxeljob);
+        //meshhandle.Complete();
+
+
+
+
+
+
+        Profiler.BeginSample("test_vertexprocess");
+
+        //ProcessVertices vertexJob = new ProcessVertices()
+        //{
+        //    Tempvertices = nativeVertices,
+        //    vertices = TempVertices,
+        //    triangles = nativeTriangles,
+        //    colors = colors
+
+        //};
+        //JobHandle deps = new JobHandle();
+        //JobHandle vertexHandle = vertexJob.Schedule(TempVertices.Length, deps);
+        //Profiler.EndSample();
+        //JobHandle combinedJobs = JobHandle.CombineDependencies(voxeljob, vertexHandle);
+        //combinedHandle = combinedJobs;
+
+        //combinedJobs.Complete();
+       // TempVertices.Dispose();
+
+
+
+        SetMesh();
+        UnloadVoxels();
+        Loaded = true;
+    }
+
 
     public void RebuildVoxels(List<float> heightMap)
     {
@@ -287,7 +436,7 @@ public class Block
         int zVoxels = xVoxels;
         int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
         int totalVoxels = (xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1);
-       
+
         NativeArray<Vector3Int> modified = new NativeArray<Vector3Int>(modifiedVoxels.ToArray(), allocator: Allocator.TempJob);
 
         ModifyVoxelStructure_job modifyJob = new ModifyVoxelStructure_job
@@ -296,8 +445,8 @@ public class Block
             voxelData = voxelData,
             modifiedVoxels = modified,
             voxelSize = voxel_Size,
-            voxelHeight = yVoxels + 1 ,
-            voxelWidth = xVoxels + 1 
+            voxelHeight = yVoxels + 1,
+            voxelWidth = xVoxels + 1
 
         };
 
@@ -305,7 +454,7 @@ public class Block
         modifyHandle.Complete();
         modified.Dispose();
     }
-    public void RebuildMesh(WorldData.TerrainData terrainData,GameObject oldChunk)
+    public void RebuildMesh(WorldData.TerrainData terrainData, GameObject oldChunk)
     {
         Debug.Log("rebuilding mesh");
         nativeVertices = new NativeList<Vector3>(2500, allocator: Allocator.TempJob);
@@ -373,7 +522,7 @@ public class Block
             voxelsDisposed = true;
 
         }
-       // Debug.Log("voxels disposed");
+        // Debug.Log("voxels disposed");
     }
 
     public void SetMesh()
@@ -569,7 +718,7 @@ public class Block
             int voxelsHeight = voxelHeight;
 
             int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
-            Debug.Log($"voxelpos: {x}:{y}:{z} voxeindex: {voxelIndex} voxel length: { voxelData.Length}");
+            Debug.Log($"voxelpos: {x}:{y}:{z} voxeindex: {voxelIndex} voxel length: {voxelData.Length}");
             if (voxelIndex < voxelData.Length)
             {
 
@@ -874,7 +1023,7 @@ public class Block
     }
 
 
-
+    [StructLayout(LayoutKind.Sequential)]
     public struct Triangle
     {
         public float3 a;

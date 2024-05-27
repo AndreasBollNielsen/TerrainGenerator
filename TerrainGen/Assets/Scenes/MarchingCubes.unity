@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 1009.985, g: 1201.3165, b: 1563.3792, a: 1}
+  m_IndirectSpecularColor: {r: 1013.50574, g: 1220.4559, b: 1616.0472, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -521,7 +521,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 491153958}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 84f99e3a94f16454f982f2ff4845567f, type: 3}
   m_Name: 
@@ -538,6 +538,7 @@ MonoBehaviour:
   DebugTiles: 0
   DebugBlocks: 0
   player: {fileID: 2034967654}
+  computeShader: {fileID: 7200000, guid: bb0971d8d37858b4eb14ddb82484e014, type: 3}
 --- !u!4 &491153960
 Transform:
   m_ObjectHideFlags: 0
@@ -573,7 +574,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 491153958}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0634a1e8700ff65488a62b84311f056c, type: 3}
   m_Name: 

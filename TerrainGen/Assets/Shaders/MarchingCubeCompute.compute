@@ -1,0 +1,170 @@
+#pragma kernel CSMain
+
+struct VoxelData {
+    float DistanceToSurface;
+};
+
+struct Triangle {
+    float3 a;
+    float4 col_a;
+    float3 b;
+    float4 col_b;
+    float3 c;
+    float4 col_c;
+};
+
+// Forward declarations
+float GetVoxelSample(float3 worldPosition, int voxelSize);
+float4 ColorSample(float sample);
+void MarchCube(float3 position, int voxelSize, int width);
+
+
+
+RWStructuredBuffer<Triangle> vertices;
+StructuredBuffer<VoxelData> voxelData;
+StructuredBuffer<int> triangleTable;
+StructuredBuffer<float3> cornerTable;
+
+int voxelWidth;
+int voxelHeight;
+int voxelSize;
+int voxelArrayLenth;
+int verticesArrayLength;
+float width;
+float height;
+float surfaceDensity;
+float4 randcol;
+
+static const float3 CornerTable[8] = {
+    float3(0, 0, 0), float3(1, 0, 0), float3(1, 1, 0), float3(0, 1, 0),
+    float3(0, 0, 1), float3(1, 0, 1), float3(1, 1, 1), float3(0, 1, 1)
+};
+
+static const int edgeTable[12][2] = {
+    {0, 1}, {1, 2}, {2, 3}, {3, 0}, // edges on the bottom face
+    {4, 5}, {5, 6}, {6, 7}, {7, 4}, // edges on the top face
+    {0, 4}, {1, 5}, {2, 6}, {3, 7}  // edges between the bottom and top faces
+};
+
+[numthreads(8, 8, 8)]
+void CSMain(uint3 id : SV_DispatchThreadID) {
+    int x = id.x;
+    int y = id.y;
+    int z = id.z;
+
+    if (x >= voxelWidth || y >= voxelHeight || z >= voxelWidth) return;
+
+    float3 voxelPosition = float3(
+        x * voxelSize,
+        y * voxelSize,
+        z * voxelSize
+    );
+
+    if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height) {
+        MarchCube(voxelPosition, voxelSize, int(width));
+    }
+}
+
+void MarchCube(float3 position, int voxelSize, int width) {
+    int configIndex = 0;
+    float3 worldPos;
+    for (int j = 0; j < 8; j++) {
+        worldPos = position + CornerTable[j] * voxelSize;
+        float voxelSample = GetVoxelSample(worldPos, voxelSize);
+
+        if (voxelSample > surfaceDensity) {
+            configIndex |= 1 << j;
+        }
+    }
+
+    if (configIndex == 0 || configIndex == 255) {
+        return;
+    }
+
+    int edgeIndex = 0;
+    int indice = 0;
+    float3 vert1;
+    float3 vert2;
+    float3 vertexPosition;
+    float vert1Sample;
+    float vert2Sample;
+    float diff;
+
+    for (int i = 0; i < 5; i++) {
+       
+    Triangle _triangle;
+        for (int j = 0; j < 3; j++) {
+            indice = triangleTable[configIndex * 16 + edgeIndex];
+            if (indice == -1) {
+                return;
+            }
+
+            vert1 = position + CornerTable[edgeTable[indice][0]] * voxelSize;
+            vert2 = position + CornerTable[edgeTable[indice][1]] * voxelSize;
+
+            vert1Sample = GetVoxelSample(vert1, voxelSize);
+            vert2Sample = GetVoxelSample(vert2, voxelSize);
+
+            diff = vert2Sample - vert1Sample;
+            if (diff == 0) {
+                diff = surfaceDensity;
+            } else {
+                diff = (surfaceDensity - vert1Sample) / diff;
+            }
+
+            vertexPosition = vert1 + (vert2 - vert1) * diff;
+
+            if (j == 0) {
+                _triangle.a = vertexPosition;
+                _triangle.col_a = ColorSample(diff);
+                _triangle.col_a = randcol;
+            } else if (j == 1) {
+                _triangle.b = vertexPosition;
+                _triangle.col_b = ColorSample(diff);
+                _triangle.col_b = randcol;
+            } else if (j == 2) {
+                _triangle.c = vertexPosition;
+                _triangle.col_c = ColorSample(diff);
+                _triangle.col_c = randcol;
+            }
+
+            edgeIndex++;
+        }
+
+        vertices[verticesArrayLength] = _triangle;
+    }
+}
+
+float GetVoxelSample(float3 worldPosition, int voxelSize)
+{
+    int x = int(worldPosition.x / voxelSize);
+    int y = int(worldPosition.y / voxelSize);
+    int z = int(worldPosition.z / voxelSize);
+
+    int voxelsWidth = voxelWidth + 1;
+    int voxelsHeight = voxelHeight + 1;
+
+    int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
+    if (voxelIndex >= voxelArrayLenth)
+    {
+        return -1.0;
+    }
+
+    return voxelData[voxelIndex].DistanceToSurface;
+}
+
+float4 ColorSample(float sample)
+{
+    if (sample >= 0)
+    {
+        return float4(1, 0, 0, 0);
+    }
+    else if (sample < 5.0f)
+    {
+        return float4(0, 1, 0, 0);
+    }
+    else
+    {
+        return float4(0, 0, 0, 1);
+    }
+}
