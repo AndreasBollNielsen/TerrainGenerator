@@ -467,7 +467,7 @@ public class VoxelGenerator : MonoBehaviour
                 var blocks = GenerateBlocks(xtile, ytile);
                 Profiler.EndSample();
                 int numblocks = blocks.Count;
-               // numblocks = 10;
+                numblocks = 1;
                 //object[] parameters = new object[3];
                 //parameters[0] = heightmaps[heightmapCounter];
                 //parameters[1] = terrainData;

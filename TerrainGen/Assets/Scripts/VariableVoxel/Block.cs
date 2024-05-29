@@ -265,7 +265,7 @@ public class Block
 
 
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
-        Vector3[] nativeVertices = new Vector3[2500]; 
+        //  Vector3[] nativeVertices = new Vector3[2500];
         Triangle[] TempVertices = new Triangle[9000];
         nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
         colors = new NativeList<Color>(allocator: Allocator.TempJob);
@@ -294,28 +294,32 @@ public class Block
 
 
 
+        Debug.Log($"x: {xVoxels} y: {yVoxels} z: {xVoxels}");
 
-
-        ComputeBuffer voxelDataBuffer = new ComputeBuffer(voxelData.Length, sizeof(float));
-        voxelDataBuffer.SetData(voxelData);
-        ComputeBuffer verticesBuffer = new ComputeBuffer(TempVertices.Length, Marshal.SizeOf(typeof(Triangle)));
-
+        ComputeBuffer voxelDataBuffer = new ComputeBuffer(voxelData.Length, Marshal.SizeOf(typeof(VoxelData_v2)));
+        voxelDataBuffer.SetData(voxelData.ToArray());
+        ComputeBuffer triangles_Buffer = new ComputeBuffer(TempVertices.Length, Marshal.SizeOf(typeof(Triangle)), ComputeBufferType.Append);
+        ComputeBuffer triangles_count_buffer = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
         ComputeBuffer triangleTableBuffer = new ComputeBuffer(terrainData.TriangleTable.Length, sizeof(int));
         triangleTableBuffer.SetData(terrainData.TriangleTable);
-
         ComputeBuffer cornerTableBuffer = new ComputeBuffer(terrainData.CornerTable.Length, Marshal.SizeOf(typeof(Vector3)));
+
+        triangles_Buffer.SetCounterValue(0);
+
         cornerTableBuffer.SetData(terrainData.CornerTable);
+        
 
         computeShader.SetBuffer(0, "voxelData", voxelDataBuffer);
-        computeShader.SetBuffer(0, "vertices", verticesBuffer);
+        computeShader.SetBuffer(0, "_triangles", triangles_Buffer);
         computeShader.SetBuffer(0, "triangleTable", triangleTableBuffer);
         computeShader.SetBuffer(0, "cornerTable", cornerTableBuffer);
+
 
         computeShader.SetInt("voxelWidth", xVoxels);
         computeShader.SetInt("voxelHeight", yVoxels);
         computeShader.SetInt("voxelSize", voxel_Size);
+        // computeShader.SetInt("triangleCount", 0);
         computeShader.SetInt("voxelArrayLenth", voxelData.Length);
-        computeShader.SetInt("verticesArrayLength", TempVertices.Length);
         computeShader.SetFloat("width", Width);
         computeShader.SetFloat("height", Constants.height);
         computeShader.SetFloat("surfaceDensity", WorldData.surfaceDensity);
@@ -324,12 +328,36 @@ public class Block
         int threadGroupsX = Mathf.CeilToInt(xVoxels / 8.0f);
         int threadGroupsY = Mathf.CeilToInt(yVoxels / 8.0f);
         int threadGroupsZ = Mathf.CeilToInt(xVoxels / 8.0f);
-        computeShader.Dispatch(0, threadGroupsX, threadGroupsY, threadGroupsZ);
-        verticesBuffer.GetData(nativeVertices.Length);
+     //   int numThreads = threadGroupsX * threadGroupsY * threadGroupsZ * 8 * 8 * 8;
+       // Debug.Log($"numthreads: {numThreads} voxels: {voxelData.Length}");
 
+        ComputeBuffer debugBuffer = new ComputeBuffer(voxelData.Length, Marshal.SizeOf(typeof(DebugData)), ComputeBufferType.Default);
+        DebugData[] debugData = new DebugData[voxelData.Length]; // Initialize an array to store debug data
+        computeShader.SetBuffer(0, "_debugBuffer", debugBuffer);
+
+        computeShader.Dispatch(0, threadGroupsX, threadGroupsY, threadGroupsZ);
+
+        int count = ReadTrianglesCount();
+        Debug.Log(count);
+       //  int[] debugOutput = new int[8];
+       // VoxelData_v2[] output = new VoxelData_v2[voxelData.Length];
+        debugBuffer.GetData(debugData);
+
+        for (int i = 0; i < debugData.Length; i++)
+        {
+            if (i < 1000)
+            {
+                Debug.Log($"Voxel Position: {debugData[i].position} data: {debugData[i].data}");
+
+            }
+        }
+
+          Triangle[] triangles = new Triangle[ReadTrianglesCount()];
+          triangles_Buffer.GetData(triangles);
         voxelDataBuffer.Release();
-        verticesBuffer.Release();
+        triangles_Buffer.Release();
         triangleTableBuffer.Release();
+        debugBuffer.Release();
         cornerTableBuffer.Release();
 
 
@@ -376,13 +404,21 @@ public class Block
         //combinedHandle = combinedJobs;
 
         //combinedJobs.Complete();
-       // TempVertices.Dispose();
+        // TempVertices.Dispose();
 
 
 
-        SetMesh();
+        // SetMesh();
         UnloadVoxels();
         Loaded = true;
+
+        int ReadTrianglesCount()
+        {
+            int[] triangleCount = { 0 };
+            ComputeBuffer.CopyCount(triangles_Buffer, triangles_count_buffer, 0);
+            triangles_count_buffer.GetData(triangleCount);
+            return triangleCount[0];
+        }
     }
 
 
@@ -565,6 +601,8 @@ public class Block
         chunk = _chunk;
     }
 
+
+
     private void CalcMemory(int totalVoxels)
     {
         int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(VoxelData_v2));
@@ -623,6 +661,24 @@ public class Block
             DistanceToSurface = dist;
             TexIndex = index;
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Triangle
+    {
+        public float3 a;
+        public float3 b;
+        public float3 c;
+
+        public float4 col_a;
+        public float4 col_b;
+        public float4 col_c;
+    }
+
+    public struct DebugData
+    {
+        public half data;
+        public float3 position;
     }
 
     #region Multithread jobs
@@ -1023,17 +1079,7 @@ public class Block
     }
 
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct Triangle
-    {
-        public float3 a;
-        public float3 b;
-        public float3 c;
-
-        public float4 col_a;
-        public float4 col_b;
-        public float4 col_c;
-    }
+   
 
     //deprecated
     //public struct Indices

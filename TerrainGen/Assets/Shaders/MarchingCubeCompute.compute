@@ -1,10 +1,13 @@
 #pragma kernel CSMain
 
-struct VoxelData {
-    float DistanceToSurface;
+struct VoxelData
+{
+    half DistanceToSurface;
+    uint TexIndex;
 };
 
-struct Triangle {
+struct Triangle
+{
     float3 a;
     float4 col_a;
     float3 b;
@@ -13,14 +16,24 @@ struct Triangle {
     float4 col_c;
 };
 
+ 
+struct DebugData
+{
+    half data;
+    float3 position;
+};
+
 // Forward declarations
-float GetVoxelSample(float3 worldPosition, int voxelSize);
+float GetVoxelSample(
+float3 worldPosition, int voxelSize);
 float4 ColorSample(float sample);
 void MarchCube(float3 position, int voxelSize, int width);
 
 
 
-RWStructuredBuffer<Triangle> vertices;
+AppendStructuredBuffer<Triangle> _triangles;
+RWStructuredBuffer<int> _trianglesBufferCount;
+RWStructuredBuffer<DebugData> _debugBuffer;
 StructuredBuffer<VoxelData> voxelData;
 StructuredBuffer<int> triangleTable;
 StructuredBuffer<float3> cornerTable;
@@ -29,30 +42,43 @@ int voxelWidth;
 int voxelHeight;
 int voxelSize;
 int voxelArrayLenth;
-int verticesArrayLength;
 float width;
 float height;
 float surfaceDensity;
 float4 randcol;
+int counter;
 
-static const float3 CornerTable[8] = {
+static const float3 CornerTable[8] =
+{
     float3(0, 0, 0), float3(1, 0, 0), float3(1, 1, 0), float3(0, 1, 0),
     float3(0, 0, 1), float3(1, 0, 1), float3(1, 1, 1), float3(0, 1, 1)
 };
 
-static const int edgeTable[12][2] = {
-    {0, 1}, {1, 2}, {2, 3}, {3, 0}, // edges on the bottom face
-    {4, 5}, {5, 6}, {6, 7}, {7, 4}, // edges on the top face
-    {0, 4}, {1, 5}, {2, 6}, {3, 7}  // edges between the bottom and top faces
+static const int edgeTable[12][2] =
+{
+    { 0, 1 },
+    { 1, 2 },
+    { 2, 3 },
+    { 3, 0 }, // edges on the bottom face
+    { 4, 5 },
+    { 5, 6 },
+    { 6, 7 },
+    { 7, 4 }, // edges on the top face
+    { 0, 4 },
+    { 1, 5 },
+    { 2, 6 },
+    { 3, 7 } // edges between the bottom and top faces
 };
 
 [numthreads(8, 8, 8)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
     int x = id.x;
     int y = id.y;
     int z = id.z;
 
-    if (x >= voxelWidth || y >= voxelHeight || z >= voxelWidth) return;
+    if (x >= voxelWidth || y >= voxelHeight || z >= voxelWidth)
+        return;
 
     float3 voxelPosition = float3(
         x * voxelSize,
@@ -60,24 +86,38 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         z * voxelSize
     );
 
-    if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height) {
+    
+    if (voxelPosition.x < width && voxelPosition.z < width && voxelPosition.y < height)
+    {
+       
+        
         MarchCube(voxelPosition, voxelSize, int(width));
+        
+        
     }
 }
 
-void MarchCube(float3 position, int voxelSize, int width) {
+void MarchCube(float3 position, int voxelSize, int width)
+{
     int configIndex = 0;
     float3 worldPos;
-    for (int j = 0; j < 8; j++) {
+    for (int j = 0; j < 8; j++)
+    {
         worldPos = position + CornerTable[j] * voxelSize;
         float voxelSample = GetVoxelSample(worldPos, voxelSize);
 
-        if (voxelSample > surfaceDensity) {
+        if (voxelSample > surfaceDensity)
+        {
             configIndex |= 1 << j;
+           
         }
+       
     }
+    
 
-    if (configIndex == 0 || configIndex == 255) {
+    if (configIndex == 0 || configIndex == 255)
+    {
+       
         return;
     }
 
@@ -89,13 +129,18 @@ void MarchCube(float3 position, int voxelSize, int width) {
     float vert1Sample;
     float vert2Sample;
     float diff;
+    
+   
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 5; i++)
+    {
        
-    Triangle _triangle;
-        for (int j = 0; j < 3; j++) {
+        Triangle _triangle;
+        for (int j = 0; j < 3; j++)
+        {
             indice = triangleTable[configIndex * 16 + edgeIndex];
-            if (indice == -1) {
+            if (indice == -1)
+            {
                 return;
             }
 
@@ -106,32 +151,43 @@ void MarchCube(float3 position, int voxelSize, int width) {
             vert2Sample = GetVoxelSample(vert2, voxelSize);
 
             diff = vert2Sample - vert1Sample;
-            if (diff == 0) {
+            if (diff == 0)
+            {
                 diff = surfaceDensity;
-            } else {
+            }
+            else
+            {
                 diff = (surfaceDensity - vert1Sample) / diff;
             }
 
             vertexPosition = vert1 + (vert2 - vert1) * diff;
 
-            if (j == 0) {
+            if (j == 0)
+            {
                 _triangle.a = vertexPosition;
-                _triangle.col_a = ColorSample(diff);
+               // _triangle.col_a = ColorSample(diff);
                 _triangle.col_a = randcol;
-            } else if (j == 1) {
+            }
+            else if (j == 1)
+            {
                 _triangle.b = vertexPosition;
-                _triangle.col_b = ColorSample(diff);
+              //  _triangle.col_b = ColorSample(diff);
                 _triangle.col_b = randcol;
-            } else if (j == 2) {
+            }
+            else if (j == 2)
+            {
                 _triangle.c = vertexPosition;
-                _triangle.col_c = ColorSample(diff);
+              //  _triangle.col_c = ColorSample(diff);
                 _triangle.col_c = randcol;
             }
 
             edgeIndex++;
         }
 
-        vertices[verticesArrayLength] = _triangle;
+        
+        _triangles.Append(_triangle);
+       
+
     }
 }
 
@@ -147,7 +203,21 @@ float GetVoxelSample(float3 worldPosition, int voxelSize)
     int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
     if (voxelIndex >= voxelArrayLenth)
     {
+       
         return -1.0;
+    }
+    
+    if (counter < 1000)
+    {
+        int voxelsWidth = voxelWidth + 1;
+        int voxelsHeight = voxelHeight + 1;
+       // int voxelIndex = x + y * voxelsWidth + z * (voxelsWidth * voxelsHeight);
+       // _debugBuffer[id.x + id.y * voxelWidth + id.z * voxelWidth * voxelHeight] = voxelPosition;
+        _debugBuffer[voxelIndex].data = voxelData[voxelIndex].DistanceToSurface;
+        _debugBuffer[voxelIndex].position = float3(x,y,z);
+        
+       
+
     }
 
     return voxelData[voxelIndex].DistanceToSurface;
