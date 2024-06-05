@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class WaterSimulation 
@@ -21,9 +22,9 @@ public class WaterSimulation
                 float heightValue = pixelColor.r * 50;
                 waterData.TerrainHeightMap[x, y] = heightValue;
 
-                SetWater(x, y, 10);
             }
         }
+                SetWater(10, 10, 10);
     }
 
     public void SetWater(int x, int y, float value)
@@ -33,26 +34,63 @@ public class WaterSimulation
 
     public void SimulateWaterFlow()
     {
+        SetWater(10, 10, 100);
         float[,] newWaterHeightMap = new float[waterData.Width, waterData.Height];
 
-        for (int x = 1; x < waterData.Width - 1; x++)
+        // Initialize newWaterHeightMap with the current water levels
+        for (int x = 0; x < waterData.Width; x++)
         {
-            for (int y = 1; y < waterData.Height - 1; y++)
+            for (int y = 0; y < waterData.Height; y++)
             {
-                float totalHeight = waterData.TerrainHeightMap[x, y] + waterData.WaterHeightMap[x, y];
-
-                float averageHeight = (
-                    (waterData.TerrainHeightMap[x + 1, y] + waterData.WaterHeightMap[x + 1, y]) +
-                    (waterData.TerrainHeightMap[x - 1, y] + waterData.WaterHeightMap[x - 1, y]) +
-                    (waterData.TerrainHeightMap[x, y + 1] + waterData.WaterHeightMap[x, y + 1]) +
-                    (waterData.TerrainHeightMap[x, y - 1] + waterData.WaterHeightMap[x, y - 1])
-                ) / 4.0f;
-
-                newWaterHeightMap[x, y] = waterData.WaterHeightMap[x, y] + (averageHeight - totalHeight) * 0.25f;
-                if (newWaterHeightMap[x, y] < 0) newWaterHeightMap[x, y] = 0;
+                newWaterHeightMap[x, y] = waterData.WaterHeightMap[x, y];
             }
         }
 
+        for (int x = 0; x < waterData.Width; x++)
+        {
+            for (int y = 0; y < waterData.Height; y++)
+            {
+                if (waterData.WaterHeightMap[x, y] > 0)
+                {
+                    float currentHeight = waterData.TerrainHeightMap[x, y] + waterData.WaterHeightMap[x, y];
+                    int bestNeighborX = -1;
+                    int bestNeighborY = -1;
+                    float maxPotentialFlow = 0;
+
+                    // Check neighboring cells
+                    int[,] directions = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
+
+                    for (int i = 0; i < directions.GetLength(0); i++)
+                    {
+                        int nx = x + directions[i, 0];
+                        int ny = y + directions[i, 1];
+
+                        if (nx >= 0 && nx < waterData.Width && ny >= 0 && ny < waterData.Height)
+                        {
+                            float neighborHeight = waterData.TerrainHeightMap[nx, ny] + waterData.WaterHeightMap[nx, ny];
+                            float potentialFlow = currentHeight - neighborHeight;
+
+                            if (potentialFlow > maxPotentialFlow)
+                            {
+                                maxPotentialFlow = potentialFlow;
+                                bestNeighborX = nx;
+                                bestNeighborY = ny;
+                            }
+                        }
+                    }
+
+                    // Move water to the best neighbor
+                    if (bestNeighborX != -1 && bestNeighborY != -1)
+                    {
+                        float flowAmount = Mathf.Min(waterData.FlowRate, maxPotentialFlow / 2);
+                        newWaterHeightMap[x, y] -= flowAmount;
+                        newWaterHeightMap[bestNeighborX, bestNeighborY] += flowAmount;
+                    }
+                }
+            }
+        }
+
+        // Update water levels
         for (int x = 0; x < waterData.Width; x++)
         {
             for (int y = 0; y < waterData.Height; y++)
@@ -61,4 +99,8 @@ public class WaterSimulation
             }
         }
     }
+
+
 }
+
+

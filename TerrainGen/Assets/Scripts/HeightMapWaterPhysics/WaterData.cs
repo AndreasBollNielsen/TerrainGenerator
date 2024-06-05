@@ -8,12 +8,15 @@ public class WaterData
     public int Height { get; private set; }
     public float[,] TerrainHeightMap { get; private set; }
     public float[,] WaterHeightMap { get; private set; }
+    public float FlowRate { get; private set; }
 
-    public WaterData(int width, int height)
+
+    public WaterData(int width, int height, float flowRate)
     {
         Width = width;
         Height = height;
         TerrainHeightMap = new float[width, height];
         WaterHeightMap = new float[width, height];
+        FlowRate = flowRate;
     }
 }

@@ -30,7 +30,8 @@ public class WaterMesher : MonoBehaviour
         {
             for (int y = 0; y < waterData.Height; y++)
             {
-                vertices[index] = new Vector3(x, waterData.WaterHeightMap[x, y], y);
+                float waterHeight = waterData.WaterHeightMap[x, y] + waterData.TerrainHeightMap[x, y];
+                vertices[index] = new Vector3(x, waterHeight, y);
                 uv[index] = new Vector2((float)x / waterData.Width, (float)y / waterData.Height);
                 index++;
             }
@@ -58,7 +59,7 @@ public class WaterMesher : MonoBehaviour
         waterMesh.uv = uv;
         waterMesh.RecalculateNormals();
 
-       
+
     }
 
     public void UpdateWaterMesh()
@@ -68,7 +69,11 @@ public class WaterMesher : MonoBehaviour
             for (int y = 0; y < waterData.Height; y++)
             {
                 int index = x * waterData.Height + y;
-                vertices[index].y = waterData.WaterHeightMap[x, y];
+                if (waterData.WaterHeightMap[x, y] > 0.0f)
+                {
+                    vertices[index].y = waterData.WaterHeightMap[x, y] + waterData.TerrainHeightMap[x, y];
+
+                }
             }
         }
 
