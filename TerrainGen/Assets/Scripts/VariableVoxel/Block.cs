@@ -1,3 +1,4 @@
+using Assets.Scripts.VariableVoxel;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -31,6 +32,8 @@ public class Block
     NativeList<int> nativeTriangles;
     NativeList<Color> colors;
     NativeParallelMultiHashMap<Vector3, int> lookupTable;
+    ComputeBuffer _triangleBuffer;
+    ComputeBuffer _trianglesCountBuffer;
 
     private int blockId;
     JobHandle combinedHandle;
@@ -123,6 +126,7 @@ public class Block
         Unity.Mathematics.Random randomGen = new Unity.Mathematics.Random((uint)UnityEngine.Random.Range(1, 100000));
         float4 randCol = randomGen.NextFloat4(0, 1);
 
+
         //calc offset
         offsetX = (X - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
         offsetY = (Y - Width / 2 + Constants.heightmapWidth - 1) % (Constants.heightmapWidth - 1);
@@ -192,7 +196,7 @@ public class Block
             width = Width,
 
             vertices = TempVertices.AsParallelWriter(),
-            randcol = randCol
+            randcol = new Color(randCol.x, randCol.y, randCol.z, randCol.w)
 
 
         };
@@ -254,7 +258,7 @@ public class Block
         int xVoxels = Mathf.CeilToInt((Width + 1) / voxel_Size);
         int zVoxels = xVoxels;
 
-
+        // Debug.Log($"chunkwidth: {xVoxels} voxelsize: {voxel_Size}");
 
         //set total voxel size
         int yVoxels = Mathf.CeilToInt((MaxHeight + 1) / voxel_Size);
@@ -265,10 +269,10 @@ public class Block
 
 
         voxelData = new NativeArray<VoxelData_v2>(totalVoxels, allocator: Allocator.Persistent);
-        //  Vector3[] nativeVertices = new Vector3[2500];
-        Triangle[] TempVertices = new Triangle[9000];
-        nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
-        colors = new NativeList<Color>(allocator: Allocator.TempJob);
+
+        //Triangle[] TempVertices = new Triangle[9000];
+        //nativeTriangles = new NativeList<int>(1800 * 3, allocator: Allocator.TempJob);
+        //colors = new NativeList<Color>(allocator: Allocator.TempJob);
 
 
         Profiler.EndSample();
@@ -294,97 +298,48 @@ public class Block
 
 
 
-        Debug.Log($"x: {xVoxels} y: {yVoxels} z: {xVoxels}");
 
-        ComputeBuffer voxelDataBuffer = new ComputeBuffer(voxelData.Length, Marshal.SizeOf(typeof(VoxelData_v2)));
-        voxelDataBuffer.SetData(voxelData.ToArray());
-        ComputeBuffer triangles_Buffer = new ComputeBuffer(TempVertices.Length, Marshal.SizeOf(typeof(Triangle)), ComputeBufferType.Append);
-        ComputeBuffer triangles_count_buffer = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
-        ComputeBuffer triangleTableBuffer = new ComputeBuffer(terrainData.TriangleTable.Length, sizeof(int));
-        triangleTableBuffer.SetData(terrainData.TriangleTable);
-        ComputeBuffer cornerTableBuffer = new ComputeBuffer(terrainData.CornerTable.Length, Marshal.SizeOf(typeof(Vector3)));
+        // Debug.Log($"x: {xVoxels} y: {yVoxels} z: {zVoxels}");
 
-        triangles_Buffer.SetCounterValue(0);
+        ComputeBuffer voxelDataBuffer = new ComputeBuffer(voxelData.Length, VoxelData_v2.SizeOf);
+        _triangleBuffer = new ComputeBuffer(5 * ((xVoxels + 1) * (yVoxels + 1) * (zVoxels + 1)), Triangle.SizeOf, ComputeBufferType.Append);
+        _trianglesCountBuffer = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
 
-        cornerTableBuffer.SetData(terrainData.CornerTable);
-        
+        // set buffers
+        computeShader.SetBuffer(0, "_Triangles", _triangleBuffer);
+        computeShader.SetBuffer(0, "_Weights", voxelDataBuffer);
 
-        computeShader.SetBuffer(0, "voxelData", voxelDataBuffer);
-        computeShader.SetBuffer(0, "_triangles", triangles_Buffer);
-        computeShader.SetBuffer(0, "triangleTable", triangleTableBuffer);
-        computeShader.SetBuffer(0, "cornerTable", cornerTableBuffer);
+        //set variables
+        computeShader.SetInt("_ChunkSize", Width);
+        computeShader.SetFloat("_IsoLevel", 0.5f);
+        computeShader.SetInt("_VoxelHeight", yVoxels * voxel_Size);
+        computeShader.SetInt("_VoxekWidth", (xVoxels + 2));
+        computeShader.SetInt("_voxelSize", voxel_Size);
+
+        //initialize buffers
+        var data = voxelData.ToArray();
+        voxelDataBuffer.SetData(data);
+        _triangleBuffer.SetCounterValue(0);
 
 
-        computeShader.SetInt("voxelWidth", xVoxels);
-        computeShader.SetInt("voxelHeight", yVoxels);
-        computeShader.SetInt("voxelSize", voxel_Size);
-        // computeShader.SetInt("triangleCount", 0);
-        computeShader.SetInt("voxelArrayLenth", voxelData.Length);
-        computeShader.SetFloat("width", Width);
-        computeShader.SetFloat("height", Constants.height);
-        computeShader.SetFloat("surfaceDensity", WorldData.surfaceDensity);
-        computeShader.SetVector("randcol", randCol);
 
-        int threadGroupsX = Mathf.CeilToInt(xVoxels / 8.0f);
-        int threadGroupsY = Mathf.CeilToInt(yVoxels / 8.0f);
-        int threadGroupsZ = Mathf.CeilToInt(xVoxels / 8.0f);
-     //   int numThreads = threadGroupsX * threadGroupsY * threadGroupsZ * 8 * 8 * 8;
-       // Debug.Log($"numthreads: {numThreads} voxels: {voxelData.Length}");
 
-        ComputeBuffer debugBuffer = new ComputeBuffer(voxelData.Length, Marshal.SizeOf(typeof(DebugData)), ComputeBufferType.Default);
-        DebugData[] debugData = new DebugData[voxelData.Length]; // Initialize an array to store debug data
-        computeShader.SetBuffer(0, "_debugBuffer", debugBuffer);
+        // Number of Thread Groups
+        int numGroupsX = Mathf.CeilToInt((xVoxels + 1));
+        int numGroupsY = Mathf.CeilToInt((yVoxels + 1));
+        int numGroupsZ = numGroupsX;
 
-        computeShader.Dispatch(0, threadGroupsX, threadGroupsY, threadGroupsZ);
+        Debug.Log($"shader data: numGroupsX {numGroupsX} numgroupY {numGroupsY} voxelsize {voxel_Size} chunksize {Width} height: {MaxHeight}");
+        computeShader.Dispatch(0, numGroupsX, numGroupsY, numGroupsZ);
 
-        int count = ReadTrianglesCount();
-        Debug.Log(count);
-       //  int[] debugOutput = new int[8];
-       // VoxelData_v2[] output = new VoxelData_v2[voxelData.Length];
-        debugBuffer.GetData(debugData);
+        //get triangles from computeshader
+        Triangle[] triangles = new Triangle[ReadTriangleCount()];
+        ///  Debug.Log($"num triangles: {triangles.Length}");
+        _triangleBuffer.GetData(triangles);
 
-        for (int i = 0; i < debugData.Length; i++)
-        {
-            if (i < 1000)
-            {
-                Debug.Log($"Voxel Position: {debugData[i].position} data: {debugData[i].data}");
-
-            }
-        }
-
-          Triangle[] triangles = new Triangle[ReadTrianglesCount()];
-          triangles_Buffer.GetData(triangles);
+        _triangleBuffer.Release();
+        _trianglesCountBuffer.Release();
         voxelDataBuffer.Release();
-        triangles_Buffer.Release();
-        triangleTableBuffer.Release();
-        debugBuffer.Release();
-        cornerTableBuffer.Release();
-
-
-        //MarchingCube_Job Meshjob = new MarchingCube_Job()
-        //{
-        //    TerrainData = terrainData,
-        //    voxelData = voxelData,
-        //    voxelSize = voxel_Size,
-        //    voxelWidth = xVoxels,
-        //    voxelHeight = yVoxels,
-        //    height = Constants.height,
-        //    voxelsLength = totalVoxels,
-        //    surfaceDensity = WorldData.surfaceDensity,
-        //    width = Width,
-
-        //    vertices = TempVertices.AsParallelWriter(),
-        //    randcol = randCol
-
-
-        //};
-
-        //JobHandle meshhandle = Meshjob.Schedule(totalVoxels, 64, voxeljob);
-        //meshhandle.Complete();
-
-
-
-
 
 
         Profiler.BeginSample("test_vertexprocess");
@@ -404,20 +359,21 @@ public class Block
         //combinedHandle = combinedJobs;
 
         //combinedJobs.Complete();
-        // TempVertices.Dispose();
+        //TempVertices.Dispose();
 
 
-
-        // SetMesh();
+        CreateMesh(triangles);
+        SetMesh();
         UnloadVoxels();
         Loaded = true;
 
-        int ReadTrianglesCount()
+        int ReadTriangleCount()
         {
-            int[] triangleCount = { 0 };
-            ComputeBuffer.CopyCount(triangles_Buffer, triangles_count_buffer, 0);
-            triangles_count_buffer.GetData(triangleCount);
-            return triangleCount[0];
+            int[] count = { 0 };
+
+            ComputeBuffer.CopyCount(_triangleBuffer, _trianglesCountBuffer, 0);
+            _trianglesCountBuffer.GetData(count);
+            return count[0];
         }
     }
 
@@ -519,7 +475,7 @@ public class Block
             width = Width,
 
             vertices = TempVertices.AsParallelWriter(),
-            randcol = new float4(1, 1, 1, 1),
+            randcol = new Color(1, 1, 1, 1),
 
 
         };
@@ -601,7 +557,66 @@ public class Block
         chunk = _chunk;
     }
 
+    void CreateMesh(Triangle[] triangles)
+    {
 
+
+        //advanced mesh generation - smooth surface
+        Dictionary<Vector3, int> vertexMap = new Dictionary<Vector3, int>();
+        List<Vector3> verts = new List<Vector3>();
+        List<Color> cols = new List<Color>();
+        List<int> tris = new List<int>();
+
+        nativeVertices = new NativeList<Vector3>(allocator: Allocator.TempJob);
+        nativeTriangles = new NativeList<int>(allocator: Allocator.TempJob);
+        colors = new NativeList<Color>(allocator: Allocator.TempJob);
+
+        for (int i = 0; i < triangles.Length; i++)
+        {
+            Vector3[] triangleVertices = new Vector3[] { triangles[i].a, triangles[i].b, triangles[i].c };
+            Color[] triangleColors = new Color[] { triangles[i].col_a, triangles[i].col_b, triangles[i].col_c };
+            int[] triIndices = new int[3];
+
+            for (int j = 0; j < 3; j++)
+            {
+                Vector3 vertex = triangleVertices[j];
+                Color col = triangleColors[j];
+
+                if (vertexMap.ContainsKey(vertex))
+                {
+                    // If the vertex is already in the map, use the existing index
+                    triIndices[j] = vertexMap[vertex];
+                }
+                else
+                {
+                    // If it's a new vertex, add it to the verts list and the map
+                    nativeVertices.Add(vertex);
+                    colors.Add(col);
+                    int newIndex = nativeVertices.Length - 1;
+                    vertexMap[vertex] = newIndex;
+                    triIndices[j] = newIndex;
+                }
+            }
+
+            // Add the triangle indices to the tris list
+            nativeTriangles.Add(triIndices[0]);
+            nativeTriangles.Add(triIndices[2]); // Corrected the winding order to ensure proper face orientation
+            nativeTriangles.Add(triIndices[1]);
+        }
+
+
+        vertexMap.Clear();
+
+
+        //  Mesh mesh = new Mesh();
+        //mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        //mesh.vertices = verts.ToArray();
+        //mesh.triangles = tris.ToArray();
+        //mesh.colors = cols.ToArray();
+        //mesh.RecalculateNormals(); // Ensure smooth shading by recalculating normals
+
+
+    }
 
     private void CalcMemory(int totalVoxels)
     {
@@ -652,15 +667,17 @@ public class Block
 
     public struct VoxelData_v2
     {
-        public half DistanceToSurface;
+        public float DistanceToSurface;
         public ushort TexIndex;
 
 
-        public VoxelData_v2(half dist, ushort index)
+        public VoxelData_v2(float dist, ushort index)
         {
             DistanceToSurface = dist;
             TexIndex = index;
         }
+
+        public static int SizeOf => Marshal.SizeOf<VoxelData_v2>();
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -670,16 +687,14 @@ public class Block
         public float3 b;
         public float3 c;
 
-        public float4 col_a;
-        public float4 col_b;
-        public float4 col_c;
+        public Color col_a;
+        public Color col_b;
+        public Color col_c;
+
+        public static int SizeOf => (sizeof(float) * 3 * 3) + (sizeof(float) * 4 * 3);
     }
 
-    public struct DebugData
-    {
-        public half data;
-        public float3 position;
-    }
+
 
     #region Multithread jobs
     [BurstCompile]
@@ -742,7 +757,7 @@ public class Block
             float scaledHeight = sampledHeight * height;
 
             float dist = y - scaledHeight;
-            voxelData[index] = new VoxelData_v2((half)dist, 0);
+            voxelData[index] = new VoxelData_v2(dist, 0);
 
             // counter++;
 
@@ -808,7 +823,7 @@ public class Block
 
         [ReadOnly]
         public float surfaceDensity;
-        public float4 randcol;
+        public Color randcol;
 
         public void Execute(int index)
         {
@@ -844,7 +859,7 @@ public class Block
             {
                 //samples terrain data at neighboring cells
                 worldPos = position + (TerrainData.CornerTable[j] * voxelSize);
-                half voxelSample = GetVoxelSample(worldPos, voxelSize);
+                float voxelSample = GetVoxelSample(worldPos, voxelSize);
 
                 // Update configuration index using bitmask bool operation
                 if (voxelSample > surfaceDensity)
@@ -945,7 +960,7 @@ public class Block
 
         }
 
-        half GetVoxelSample(Vector3 worldposition, int voxelSize)
+        float GetVoxelSample(Vector3 worldposition, int voxelSize)
         {
             int x = Mathf.FloorToInt(worldposition.x / voxelSize);
             int y = Mathf.FloorToInt(worldposition.y / voxelSize);
@@ -967,20 +982,20 @@ public class Block
             return voxelData[voxelIndex].DistanceToSurface;
         }
 
-        float4 ColorSample(float sample)
+        Color ColorSample(float sample)
         {
 
             switch (sample)
             {
                 case >= 0f:
-                    return new float4(1, 0, 0, 0);
+                    return new Color(1, 0, 0, 0);
 
                 case < 5.0f:
-                    return new float4(0, 1, 0, 0);
+                    return new Color(0, 1, 0, 0);
                 //case < -5f:
                 //    return new float4(0, 0, 1, 0);
                 default:
-                    return new float4(0, 0, 0, 1);
+                    return new Color(0, 0, 0, 1);
 
             }
         }
@@ -1014,10 +1029,10 @@ public class Block
 
         }
 
-        public void AddColor(float3 vertex, float4 col)
+        public void AddColor(float3 vertex, Color col)
         {
 
-            Color vertexColor = new Color(col.x, col.y, col.z, col.w);
+            Color vertexColor = new Color(col.r, col.g, col.b, col.a);
             Tempvertices.Add(vertex);
             colors.Add(vertexColor);
         }
@@ -1079,7 +1094,7 @@ public class Block
     }
 
 
-   
+
 
     //deprecated
     //public struct Indices

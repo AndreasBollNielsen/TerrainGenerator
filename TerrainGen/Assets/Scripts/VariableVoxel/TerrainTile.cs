@@ -160,7 +160,7 @@ public class TerrainTile
             }
             else
             {
-                Debug.LogError($"chunk class at {block.GetPosition()} is null");
+               // Debug.LogError($"chunk class at {block.GetPosition()} is null");
             }
 
         }

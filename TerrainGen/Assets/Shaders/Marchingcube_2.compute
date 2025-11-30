@@ -1,10 +1,14 @@
-#pragma kernel CSMain
+
+#pragma kernel March
 
 #include "Includes/MarchingTable.hlsl"
 #include "Includes/Helper.hlsl"
 
+
+
+
 float _IsoLevel;
-int _ChunkSize;
+uint _ChunkSize;
 int _VoxekWidth;
 int _VoxelHeight;
 uint _voxelSize;
@@ -67,10 +71,11 @@ float4 SampleTextureIndex(uint textIndex)
     return float4(0, 0, 0, 1);
 }
 
+
 [numthreads(numThreads, numThreads, numThreads)]
-void CSMain(uint3 id : SV_DispatchThreadID)
+void March(uint3 id : SV_DispatchThreadID)
 {
-    voxelpos = id;
+    voxelpos = id * _voxelSize;
    
     //initialize helper function
     if (_Metrics_VoxelSize == 0)
@@ -80,7 +85,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     
     
     //return if out of bounds
-    if (id.x * _voxelSize >= _ChunkSize || id.y * _voxelSize >= _VoxelHeight  || id.z * _voxelSize >= _ChunkSize)
+    if (id.x * _voxelSize >= _ChunkSize || id.y * _voxelSize >= _VoxelHeight - 1 || id.z * _voxelSize >= _ChunkSize)
     {
         return;
     }
@@ -89,14 +94,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     //set cube values from weights
     float cubeValues[8] =
     {
-        _Weights[indexFromCoord(voxelpos.x, voxelpos.y, voxelpos.z + 1, _VoxelHeight)].DistanceToSurface,
-     _Weights[indexFromCoord(voxelpos.x + 1, voxelpos.y, voxelpos.z + 1, _VoxelHeight)].DistanceToSurface,
-     _Weights[indexFromCoord(voxelpos.x + 1, voxelpos.y, voxelpos.z, _VoxelHeight)].DistanceToSurface,
+        _Weights[indexFromCoord(voxelpos.x, voxelpos.y, voxelpos.z + _voxelSize, _VoxelHeight)].DistanceToSurface,
+     _Weights[indexFromCoord(voxelpos.x + _voxelSize, voxelpos.y, voxelpos.z + _voxelSize, _VoxelHeight)].DistanceToSurface,
+     _Weights[indexFromCoord(voxelpos.x + _voxelSize, voxelpos.y, voxelpos.z, _VoxelHeight)].DistanceToSurface,
      _Weights[indexFromCoord(voxelpos.x, voxelpos.y, voxelpos.z, _VoxelHeight)].DistanceToSurface,
-     _Weights[indexFromCoord(voxelpos.x, voxelpos.y + 1, voxelpos.z + 1, _VoxelHeight)].DistanceToSurface,
-     _Weights[indexFromCoord(voxelpos.x + 1, voxelpos.y + 1, voxelpos.z + 1, _VoxelHeight)].DistanceToSurface,
-     _Weights[indexFromCoord(voxelpos.x + 1, voxelpos.y + 1, voxelpos.z, _VoxelHeight)].DistanceToSurface,
-     _Weights[indexFromCoord(voxelpos.x, voxelpos.y + 1, voxelpos.z, _VoxelHeight)].DistanceToSurface
+     _Weights[indexFromCoord(voxelpos.x, voxelpos.y + _voxelSize, voxelpos.z + _voxelSize, _VoxelHeight)].DistanceToSurface,
+     _Weights[indexFromCoord(voxelpos.x + _voxelSize, voxelpos.y + _voxelSize, voxelpos.z + _voxelSize, _VoxelHeight)].DistanceToSurface,
+     _Weights[indexFromCoord(voxelpos.x + _voxelSize, voxelpos.y + _voxelSize, voxelpos.z, _VoxelHeight)].DistanceToSurface,
+     _Weights[indexFromCoord(voxelpos.x, voxelpos.y + _voxelSize, voxelpos.z, _VoxelHeight)].DistanceToSurface
     };
     
     //set cubeindex based on bitwise masking
@@ -122,6 +127,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     //get triangle edges from triangletable
     int edges[] = triTable[cubeIndex];
     
+    //voxelpos = id;
+    
     //loop through the edges
     for (int i = 0; edges[i] != -1; i += 3)
     {
@@ -135,10 +142,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         int edge21 = edgeConnections[edges[i + 2]][1];
         
         Triangle tri;
+       
       
-        tri.a = EdgeInterpolation(cornerOffsets[edge00], cubeValues[edge00], cornerOffsets[edge01], cubeValues[edge01]) + voxelpos * _voxelSize;
-        tri.b = EdgeInterpolation(cornerOffsets[edge10], cubeValues[edge10], cornerOffsets[edge11], cubeValues[edge11]) + voxelpos * _voxelSize;
-        tri.c = EdgeInterpolation(cornerOffsets[edge20], cubeValues[edge20], cornerOffsets[edge21], cubeValues[edge21]) + voxelpos * _voxelSize;
+        tri.a = (EdgeInterpolation(cornerOffsets[edge00], cubeValues[edge00], cornerOffsets[edge01], cubeValues[edge01]) + voxelpos) * _voxelSize;
+        tri.b =( EdgeInterpolation(cornerOffsets[edge10], cubeValues[edge10], cornerOffsets[edge11], cubeValues[edge11]) + voxelpos) * _voxelSize;
+        tri.c = (EdgeInterpolation(cornerOffsets[edge20], cubeValues[edge20], cornerOffsets[edge21], cubeValues[edge21]) + voxelpos) * _voxelSize;
         
        
         
@@ -146,23 +154,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         tri.col_b = SampleTextureIndex(_Weights[indexFromCoord(tri.b.x / _voxelSize, tri.b.y / _voxelSize, tri.b.z / _voxelSize, _VoxelHeight)].TexIndex);
         tri.col_c = SampleTextureIndex(_Weights[indexFromCoord(tri.c.x / _voxelSize, tri.c.y / _voxelSize, tri.c.z / _voxelSize, _VoxelHeight)].TexIndex);
         
-        //// Transform vertex positions back to voxel grid space
-        //uint3 voxelCoord_a = (uint3) (tri.a / _voxelSize);
-        //uint3 voxelCoord_b = (uint3) (tri.b / _voxelSize);
-        //uint3 voxelCoord_c = (uint3) (tri.c / _voxelSize);
+        
     
     
         
         _Triangles.Append(tri);
     }
 
-        
 }
-
-    
-   
-    
-    
-    
-
-

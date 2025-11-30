@@ -1,0 +1,17 @@
+
+#pragma kernel Metrics
+
+static const uint numThreads = 8;
+int _MetricsChunkSize;
+
+
+int indexFromCoord(int x, int y, int z,int height)
+{
+    return x + _MetricsChunkSize * (y + _MetricsChunkSize * z);
+}
+
+[numthreads(8, 8, 1)]
+void Metrics(uint3 id : SV_DispatchThreadID)
+{
+    
+}

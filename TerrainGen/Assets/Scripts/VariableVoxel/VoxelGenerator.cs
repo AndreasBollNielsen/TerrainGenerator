@@ -476,8 +476,13 @@ public class VoxelGenerator : MonoBehaviour
                 NativeArray<JobHandle> jobs = new NativeArray<JobHandle>(numblocks, allocator: Allocator.Persistent);
                 for (int i = 0; i < numblocks; i++)
                 {
+                    if (blocks[i].Width != 16 )
+                    {
+                        continue;
+                    }
+
                     blocks[i].CalculateHeight(heightmaps[heightmapCounter]);
-                   // blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
+                    //blocks[i].GenerateMesh(heightmaps[heightmapCounter], terrainData);
                     blocks[i].GenerateMesh_Compute(heightmaps[heightmapCounter], terrainData,computeShader);
                     // blocks[i].testjob(parameters);
                     blocks[i].SetBlockId(i);

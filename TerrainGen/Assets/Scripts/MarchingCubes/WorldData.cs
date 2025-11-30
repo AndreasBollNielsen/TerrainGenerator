@@ -8,7 +8,7 @@ public static class WorldData
 {
     public static float surfaceDensity = 0.5f;
     public static int ChunkWidth = 16;
-    public static int ChunkHeight = 2000;
+    public static int ChunkHeight = 512;
 
     public static float BaseHeight = 1f; //base level of terrain
     public static float MaxTerrainHeight = ChunkHeight - BaseHeight; // max level of terrain base on BaseHeight
