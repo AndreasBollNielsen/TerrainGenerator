@@ -621,268 +621,139 @@ public class Octree
             
         };
 
-        // Diagonal positions (same horizontal axis, y stays constant) for each face, ordered clockwise
-        Vector3[] faceDiagonals = new Vector3[]
-        {
-        new Vector3(1, 0, 1),    // Diagonal for +Z face
-        new Vector3(0, 0, 1),   // Diagonal for -X face
-        new Vector3(-1, 0, -1),  // Diagonal for -Z face
-        new Vector3(1, 0, 0),   // Diagonal for +X face
-        new Vector3(1, 1, 1), // Diagonal for +y face
-        new Vector3(-1, -1, 1), // Diagonal for -y face
-        };
-
         foreach (var node in VerticeMap.Keys)
         {
+            int anchorIndex = VerticeMap[node];
 
-
-
-            // neighbors.Add(node);
-            // Debug.Log("origin node: " + node.Bounds.center);
-            // For each face direction
-            bool surroundedByLowlevel = false;
             for (int faceindex = 0; faceindex < faceDirections.Length; faceindex++)
             {
-
-
-                // Find the four nodes sharing the face
-                OctreeTreeNode neighbor = FindNeighbor(node, faceDirections[faceindex], Root);
-                OctreeTreeNode diagonalNeighbor = null;
-                if (neighbor != null)
+                Vector3 faceDirection = faceDirections[faceindex];
+                OctreeTreeNode neighborRoot = FindNeighbor(node, faceDirection, Root);
+                if (neighborRoot == null)
                 {
-
-
-                    if (!VerticeMap.ContainsKey(neighbor))
-                    {
-
-
-                        if (neighbor.Children != null)
-                        {
-
-
-                            OctreeTreeNode childNeighbor = null;
-                            List<OctreeTreeNode> validnodes = neighbor.Children.Where(child => VerticeMap.ContainsKey(child)).ToList();
-
-                            float quarter = neighbor.Bounds.size.x / 4.0f;
-                            Vector3 size = new Vector3(neighbor.Children[0].Bounds.size.x, neighbor.Bounds.size.y, neighbor.Children[0].Bounds.size.z);
-                            Vector3 relativeOffset = faceDirections[faceindex];
-                            Vector3 adjustedOffset = new Vector3(-quarter * relativeOffset.x, 0, -quarter * relativeOffset.z);
-                            Bounds bottomRight = new Bounds(neighbor.Bounds.center + adjustedOffset, size);
-                            List<OctreeTreeNode> childNodes = new List<OctreeTreeNode>();
-
-
-                            foreach (OctreeTreeNode child in validnodes)
-                            {
-                                // validVertex = vertices[VerticeMap[child]];
-                                float maxDist = node.Bounds.size.x + (quarter * 2);
-                                var currentChild = child;
-
-                                if (node.Bounds.Intersects(child.Bounds))
-                                {
-                                    childNodes.Add(child);
-
-
-
-                                }
-
-                            }
-                            validnodes = childNodes;
-
-
-                            //remove excess children
-                            if (childNodes.Count > 2)
-                            {
-                                // Find the most common Y value among the child nodes
-                                float commonY = childNodes
-                                    .GroupBy(child => child.Bounds.center.y)
-                                    .OrderByDescending(group => group.Count()) // Get the most frequent Y value
-                                    .First()
-                                    .Key;
-
-                                // Remove child nodes that are NOT in the most common Y plane
-                                childNodes = childNodes.Where(child => Mathf.Approximately(child.Bounds.center.y, commonY)).ToList();
-                            }
-
-
-
-
-
-                            //add debug bounds
-                            int counter = 0;
-                            foreach (OctreeTreeNode child in childNodes)
-                            {
-                                var validVertex = vertices[VerticeMap[child]];
-                                Color col = Color.Lerp(Color.red, Color.green, counter);
-                                // vertexDebuggerlist.Add(new VertexDebug(validVertex, child.Bounds.center, col));
-                                counter++;
-                            }
-
-
-
-                            if (validnodes.Count > 1)
-                            {
-                                bool isNegativeAxis = (faceindex == 1 || faceindex == 2); // -X or -Z faces
-                                surroundedByLowlevel = true;
-
-                                // Sort based on the relevant axis
-                                if (faceindex == 0 || faceindex == 2) // Sorting along X-axis for +Z and -Z
-                                {
-                                    validnodes = validnodes.OrderBy(child => child.Bounds.center.x).ToList();
-
-                                }
-                                else // Sorting along Z-axis for -X and +X
-                                {
-                                    validnodes = validnodes.OrderBy(child => child.Bounds.center.z).ToList();
-                                    validnodes.Reverse();
-                                }
-
-                                // Flip order if on a negative axis (-X or -Z)
-                                if (isNegativeAxis)
-                                {
-                                    validnodes.Reverse();
-                                }
-
-
-
-                                childNeighbor = validnodes[0];
-                                diagonalNeighbor = validnodes[1];
-                            }
-
-
-
-                            // Debug.Log("done---------------------------");
-                            if (childNeighbor != null)
-                            {
-                                // vertexDebuggerlist.Add(new VertexDebug(validVertex, childNode.Bounds.center, 16));
-                                neighbor = childNeighbor;
-                            }
-
-                        }
-
-
-                    }
-
-
+                    continue;
                 }
 
-                //check diagonal neighbor
-                if (neighbor != null && VerticeMap.ContainsKey(neighbor))
+                List<OctreeTreeNode> faceNeighbors = GatherIntersectingLeaves(neighborRoot, node.Bounds);
+                if (faceNeighbors.Count == 0)
                 {
-
-
-                    Vector3 corner = faceDiagonals[faceindex];
-                    float size = neighbor.Bounds.size.x;
-                    //  Debug.Log($"neighbor exist: {neighbor.Bounds.center + corner * size} face: {faceindex}");
-
-                    //find diagonal neighbor at same level as neighbor
-                    if (diagonalNeighbor == null)
-                    {
-                        diagonalNeighbor = FindNeighbor(node, corner, Root);
-                    }
-
-                    //check if diagonal neighbor is found
-                    if (diagonalNeighbor != null)
-                    {
-                        //if(diagonalNeighbor.CurrentLevel > node.CurrentLevel)
-                        //{
-                        //    var vertex = vertices[VerticeMap[node]];
-                        //    vertexDebuggerlist.Add(new VertexDebug(vertex, node.Bounds.center, 16));
-                        //}
-
-                        //check if valid vertex exist
-                        if (!VerticeMap.ContainsKey(diagonalNeighbor))
-                        {
-                            if (surroundedByLowlevel)
-                            {
-                                var axis = faceDirections[faceindex];
-
-
-                                var offset = -diagonalNeighbor.Bounds.size.x / 2;
-                                var vertex = vertices[VerticeMap[node]];
-                                vertexDebuggerlist.Add(new VertexDebug(vertex, diagonalNeighbor.Bounds.center, Color.blue));
-                                var pos = diagonalNeighbor.Bounds.center + new Vector3(offset * axis.x, 0, offset * axis.z);
-
-                                // Debug.Log($"center: {diagonalNeighbor.Bounds.center} offset: {pos}");
-                                Vector3Int neighborpos = new Vector3Int(Mathf.RoundToInt(neighbor.Bounds.center.x), Mathf.RoundToInt(neighbor.Bounds.center.y), Mathf.RoundToInt(neighbor.Bounds.center.z));
-                                var adjacentNode = GetNodeAt(neighborpos);
-
-                                if (adjacentNode != null)
-                                {
-                                    Debug.Log($"neighbor: {faceDirections[faceindex]} diagonal: {faceDiagonals[faceindex]}");
-
-                                    vertexDebuggerlist.Add(new VertexDebug(vertex, adjacentNode.Bounds.center, Color.red));
-                                    if (adjacentNode.Children != null)
-                                    {
-                                        List<OctreeTreeNode> validnodes = adjacentNode.Children.Where(child => VerticeMap.ContainsKey(child)).ToList();
-                                        Debug.Log(validnodes.Count);
-                                    }
-                                }
-
-
-                            }
-
-                        }
-                    }
-
-
-
-                    //  Debug.Log($"face index: {faceindex} ");
-                    // Add connections if the neighbor exists
-                    if (diagonalNeighbor != null && VerticeMap.ContainsKey(diagonalNeighbor))
-                    {
-                        // Debug.Log($"diag neighbor: {diagonalNeighbor} corner: {node.Bounds.center + corner * node.Bounds.size.x} face: {faceindex} level: {level}");
-                        //  neighbors.Add(diagonalNeighbor);
-                        try
-                        {
-                            int v0 = VerticeMap[node]; // Current node's vertex
-                            int v1 = VerticeMap[neighbor]; // Face neighbor's vertex
-                            int v2 = VerticeMap[diagonalNeighbor]; // Diagonal neighbor's vertex
-
-
-                            indices.Add(v1);
-                            indices.Add(v2);
-                            indices.Add(v0);
-
-                        }
-                        catch (System.Exception e)
-                        {
-
-                            Debug.LogWarning(e.Message);
-                        }
-
-                    }
-
+                    continue;
                 }
 
+                // If the adjacent side is refined, stitch to all touching children to avoid cracks.
+                if (faceNeighbors.Count > 1)
+                {
+                    SortOnFace(faceNeighbors, faceDirection, node.Bounds.center);
+                    StitchFan(faceNeighbors, anchorIndex);
+                    continue;
+                }
+
+                OctreeTreeNode neighbor = faceNeighbors[0];
+                int neighborIndex = VerticeMap[neighbor];
+
+                Vector3[] diagonalDirections = GetDiagonalDirections(faceDirection);
+                foreach (var diagonalDirection in diagonalDirections)
+                {
+                    OctreeTreeNode diagonalRoot = FindNeighbor(node, diagonalDirection, Root);
+                    if (diagonalRoot == null)
+                    {
+                        continue;
+                    }
+
+                    List<OctreeTreeNode> diagonalNeighbors = GatherIntersectingLeaves(diagonalRoot, node.Bounds);
+                    if (diagonalNeighbors.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    OctreeTreeNode diagonal = diagonalNeighbors
+                        .OrderBy(d => Vector3.SqrMagnitude(d.Bounds.center - neighbor.Bounds.center))
+                        .First();
+
+                    int diagonalIndex = VerticeMap[diagonal];
+                    AddTriangle(neighborIndex, diagonalIndex, anchorIndex);
+                }
             }
-
-            //find neighbor with valid vertex
-            OctreeTreeNode FindAdjacentNeighbor(OctreeTreeNode neighbor, Dictionary<OctreeTreeNode, int> VerticeMap, Vector3 direction, OctreeTreeNode node)
-            {
-
-
-                Vector3[] updown = new Vector3[2] { Vector3.up, Vector3.down };
-                for (int i = 0; i < updown.Length; i++)
-                {
-                    neighbor = FindNeighbor(node, direction + updown[i], Root);
-                    if (neighbor != null)
-                    {
-                        if (VerticeMap.ContainsKey(neighbor))
-                        {
-                            return neighbor;
-                        }
-                    }
-
-                }
-
-
-                return null;
-            }
-
         }
 
+        void StitchFan(List<OctreeTreeNode> targets, int anchor)
+        {
+            if (targets.Count < 2)
+            {
+                return;
+            }
 
+            for (int i = 0; i < targets.Count; i++)
+            {
+                int v1 = VerticeMap[targets[i]];
+                int v2 = VerticeMap[targets[(i + 1) % targets.Count]];
+                AddTriangle(v1, v2, anchor);
+            }
+        }
 
+        List<OctreeTreeNode> GatherIntersectingLeaves(OctreeTreeNode start, Bounds reference)
+        {
+            List<OctreeTreeNode> leaves = new List<OctreeTreeNode>();
+            CollectIntersectingLeafNeighbors(start, reference, leaves);
+            return leaves.Where(l => VerticeMap.ContainsKey(l)).ToList();
+        }
+
+        void AddTriangle(int a, int b, int c)
+        {
+            if (a == b || b == c || c == a)
+            {
+                return;
+            }
+
+            indices.Add(a);
+            indices.Add(b);
+            indices.Add(c);
+        }
+
+        void GetFaceAxes(Vector3 normal, out Vector3 axisA, out Vector3 axisB)
+        {
+            if (Mathf.Abs(normal.x) > 0.5f)
+            {
+                axisA = Vector3.up;
+                axisB = Vector3.forward;
+            }
+            else if (Mathf.Abs(normal.y) > 0.5f)
+            {
+                axisA = Vector3.forward;
+                axisB = Vector3.right;
+            }
+            else
+            {
+                axisA = Vector3.up;
+                axisB = Vector3.right;
+            }
+        }
+
+        Vector3[] GetDiagonalDirections(Vector3 normal)
+        {
+            GetFaceAxes(normal, out var axisA, out var axisB);
+            return new[]
+            {
+                normal + axisA,
+                normal - axisA,
+                normal + axisB,
+                normal - axisB
+            };
+        }
+
+        void SortOnFace(List<OctreeTreeNode> nodesOnFace, Vector3 faceNormal, Vector3 origin)
+        {
+            GetFaceAxes(faceNormal, out var axisA, out var axisB);
+
+            nodesOnFace.Sort((a, b) =>
+            {
+                Vector3 da = a.Bounds.center - origin;
+                Vector3 db = b.Bounds.center - origin;
+                float angleA = Mathf.Atan2(Vector3.Dot(axisB, da), Vector3.Dot(axisA, da));
+                float angleB = Mathf.Atan2(Vector3.Dot(axisB, db), Vector3.Dot(axisA, db));
+                return angleA.CompareTo(angleB);
+            });
+        }
     }
 
     private void CreateMesh(List<Vector3> vertices, List<int> indices)

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/HeightMapWaterPhysics\")",
+      "Bash(rm -f \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/HeightMapWaterPhysics.meta\")",
+      "Bash(rm -rf \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/Inventory\")",
+      "Bash(rm -f \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/Inventory.meta\")",
+      "Bash(rm -rf \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/PathFinding\")",
+      "Bash(rm -f \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/PathFinding.meta\")",
+      "Bash(rm -rf \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/Material blocks\")",
+      "Bash(rm -f \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/Material blocks.meta\")",
+      "Bash(rm -rf \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/HoleGenerator\")",
+      "Bash(rm -f \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/Scripts/HoleGenerator.meta\")",
+      "Bash(rm -rf \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/ShaderGraph\")",
+      "Bash(rm -f \"d:/Unity Projects/TerrainGenerator/TerrainGen/Assets/ShaderGraph.meta\")"
+    ]
+  }
+}

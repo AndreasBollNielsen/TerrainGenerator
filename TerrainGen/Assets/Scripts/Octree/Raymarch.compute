@@ -1,0 +1,231 @@
+
+#pragma kernel CSMain
+
+RWTexture2D<float> ResultDepth;
+RWTexture2D<float4> Result;
+Texture2D<float> _HeightTex;
+SamplerState sampler_HeightTex;
+uint Width;
+uint Height;
+float3 _CamPos;
+float3 _CamForward;
+float3 _CamRight;
+float3 _CamUp;
+float _CamFov;
+float _CamAspect;
+float3 _LightDir;
+float _MaxDistance = 4.0f;
+float2 _TerrainOrigin;
+float2 _TerrainSize;
+float _HeightScale;
+
+float lambert(float3 n, float3 l)
+{
+    return max(dot(n, l), 0.0);
+}
+
+
+float sdSphere(float3 p, float r)
+{
+    float3 spherePos = float3(0, 1.0, 5.0);
+    float radius = r;
+
+    return length(p - spherePos) - radius;
+}
+
+float plane(float3 p)
+{
+    return p.y;
+}
+
+float sampleHeight(float2 worldXZ, float lod)
+{
+   // float2 uv = (worldXZ - _TerrainOrigin) / _TerrainSize;
+   // float2 uv = saturate((worldXZ - _TerrainOrigin) / _TerrainSize);
+    float2 uv = (worldXZ - _TerrainOrigin) / _TerrainSize;
+
+
+   // return _HeightTex.SampleLevel(sampler_HeightTex, uv, 0) * _HeightScale;
+    return _HeightTex.SampleLevel(sampler_HeightTex, uv, lod).r * _HeightScale;
+
+}
+
+float map(float3 p)
+{
+    float2 uv = (p.xz - _TerrainOrigin) / _TerrainSize;
+
+    // outside terrain no surface
+    if (uv.x < 0 || uv.y < 0 || uv.x > 1 || uv.y > 1)
+        return 1e6;
+    
+    float h = sampleHeight(p.xz,0);
+    
+    
+    return p.y - h;
+    
+}
+
+bool trace(float3 ro, float3 rd, out float t)
+{
+    
+    t = 0.01;
+
+    for (int i = 0; i < 256; i++)
+    {
+        float3 pos = ro + rd * t;
+        float d = map(pos);
+
+        if (d < 0.0001)
+            return true;
+
+        t += d;
+
+        if (t > 4000.0f)
+            return false;
+    }
+
+    return false;
+}
+
+//float3 calcNormal(float3 p)
+//{
+//    float eps = 0.001;
+
+//    float dx = map(p + float3(eps, 0, 0)) - map(p - float3(eps, 0, 0));
+//    float dy = map(p + float3(0, eps, 0)) - map(p - float3(0, eps, 0));
+//    float dz = map(p + float3(0, 0, eps)) - map(p - float3(0, 0, eps));
+//    return normalize(float3(dx, dy, dz));
+//}
+
+float3 calcNormal(float3 p, float t)
+{
+    //float eps = max(0.05, t * 0.0005);
+    //float3 e = float3(eps, 0, 0);
+
+    //float dx = map(p + e.xyy) - map(p - e.xyy);
+    //float dy = map(p + e.yxy) - map(p - e.yxy);
+    //float dz = map(p + e.yyx) - map(p - e.yyx);
+    //return normalize(float3(dx, dy, dz));
+    
+    
+    float eps = max(0.01, t * 0.00025);
+    eps = min(eps, 0.1);
+
+    // brug glattere heightfelt til normal
+    float hx1 = sampleHeight(p.xz + float2(eps, 0), 2);
+    float hx2 = sampleHeight(p.xz + float2(-eps, 0), 2);
+    float hz1 = sampleHeight(p.xz + float2(0, eps), 2);
+    float hz2 = sampleHeight(p.xz + float2(0, -eps), 2);
+
+    float3 n = float3(
+        hx2 - hx1,
+        2.0 * eps,
+        hz2 - hz1
+    );
+
+    return normalize(n);
+}
+
+float3 calcTerrainNormal(float3 p)
+{
+    float2 uv = (p.xz - _TerrainOrigin) / _TerrainSize;
+    float _TerrainResolution = _TerrainSize.x;
+    float texel = 1.0 / _TerrainResolution;
+
+    float hL = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(-texel, 0), 0).r;
+    float hR = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(texel, 0), 0).r;
+    float hD = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(0, -texel), 0).r;
+    float hU = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(0, texel), 0).r;
+
+    float3 n = float3(
+        hL - hR,
+        2.0 / _HeightScale,
+        hD - hU
+    );
+
+    return normalize(n);
+}
+
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= Width || id.y >= Height)
+        return;
+
+
+    //float aspect = (float) Width / (float) Height;
+    float2 uv = (id.xy / float2(Width, Height)) * 2.0 - 1.0;
+    uv.x *= _CamAspect;
+
+    //float4 clip = float4(uv, -1, 1);
+
+
+
+    
+
+   
+    // World space ray
+   // float z = 1.0 / tan(_CamFov * 0.5);
+    float fov = radians(_CamFov);
+    float3 worldDir = normalize(_CamForward + uv.x * _CamRight * tan(fov * 0.5) + uv.y * _CamUp * tan(fov * 0.5));
+   // float3 worldDir = normalize(uv.x * _CamRight + uv.y * _CamUp + z * _CamForward);
+    float3 ro = _CamPos;
+    
+
+   // Result[id.xy] = float4(1, 0, 1, 1);
+    
+    
+
+    float t;
+    bool hit = trace(ro, worldDir, t);
+    if (hit)
+    {
+        float3 hitPos = ro + worldDir * t;
+        float3 normal = calcTerrainNormal(hitPos);
+        float3 l = normalize(_LightDir);
+        float diffuse = lambert(normal, l);
+
+       
+        //if (dot(worldDir, normal) > 0)
+        //{
+        //    Result[id.xy] = float4(0, 0, 0, 0);
+        //    ResultDepth[id.xy] = _MaxDistance;
+        //    return;
+        //}
+        
+
+        // Albedo color
+        float3 albedo = float3(1.0, 1.0, 1.0);
+        
+        //ambientcolor
+        float ambient = 0.1;
+        
+        // Final color
+        float3 color = albedo * (ambient + diffuse);
+       // color = float3(1, 1, 1);
+        
+        Result[id.xy] = float4(color, 1);
+        
+        //float3 n = calcNormal(hitPos, t);
+        //Result[id.xy] = float4(n * 0.5 + 0.5, 1);
+       
+        ResultDepth[id.xy] = t;
+        
+    }
+    else
+    {
+        Result[id.xy] = float4(0, 0, 0, 0);
+        ResultDepth[id.xy] = _MaxDistance;
+    }
+    
+    return;
+}
+    
+
+    
+
+  
+   
+    
+
