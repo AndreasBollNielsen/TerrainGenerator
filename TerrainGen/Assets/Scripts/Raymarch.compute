@@ -1,231 +1,181 @@
-
 #pragma kernel CSMain
 
-RWTexture2D<float> ResultDepth;
+// -------------------------------------------------------------------------
+// Output textures
+// -------------------------------------------------------------------------
+RWTexture2D<float>  ResultDepth;
 RWTexture2D<float4> Result;
-Texture2D<float> _HeightTex;
-SamplerState sampler_HeightTex;
-uint Width;
-uint Height;
+
+// -------------------------------------------------------------------------
+// LOD-tiered heightmap arrays
+// LOD 0 — 2048×2048  (3×3 inner ring)
+// LOD 1 — 1024×1024  (5×5 ring)
+// LOD 2 —  512×512   (outer ring)
+// -------------------------------------------------------------------------
+Texture2DArray<float> _HeightTexLOD0;
+Texture2DArray<float> _HeightTexLOD1;
+Texture2DArray<float> _HeightTexLOD2;
+SamplerState sampler_HeightTexLOD0;
+SamplerState sampler_HeightTexLOD1;
+SamplerState sampler_HeightTexLOD2;
+
+// -------------------------------------------------------------------------
+// Flat 7×7 tile grid — O(1) lookup by world position
+// Slot index = gx * 7 + gy where gx/gy are offsets from _CenterTile
+// arrayIndex = -1 means tile not loaded
+// -------------------------------------------------------------------------
+struct TileData { int arrayIndex; int lodLevel; };
+StructuredBuffer<TileData> _TileGrid;
+
+// -------------------------------------------------------------------------
+// Camera, terrain & scene uniforms
+// -------------------------------------------------------------------------
+uint   Width;
+uint   Height;
 float3 _CamPos;
 float3 _CamForward;
 float3 _CamRight;
 float3 _CamUp;
-float _CamFov;
-float _CamAspect;
+float  _CamFov;
+float  _CamAspect;
 float3 _LightDir;
-float _MaxDistance = 4.0f;
-float2 _TerrainOrigin;
-float2 _TerrainSize;
-float _HeightScale;
+float  _HeightScale;
+float  _TileWorldSize;
+float  _MaxRayDistance;
+int2   _CenterTile;
 
-float lambert(float3 n, float3 l)
+#define GRID_SIZE 7
+#define GRID_HALF 3  // (GRID_SIZE - 1) / 2
+
+// -------------------------------------------------------------------------
+// O(1) height sample — direct grid slot lookup, no loops
+// -------------------------------------------------------------------------
+bool sampleHeight(float2 worldXZ, out float height)
 {
-    return max(dot(n, l), 0.0);
+    height = 0;
+
+    int2 tileCoord = int2(floor(worldXZ / _TileWorldSize));
+    int2 slot      = tileCoord - _CenterTile + GRID_HALF;
+
+    if (any(slot < 0) || any(slot >= GRID_SIZE))
+        return false;
+
+    TileData td = _TileGrid[slot.x * GRID_SIZE + slot.y];
+    if (td.arrayIndex < 0)
+        return false;
+
+    float2 tileOrigin = float2(tileCoord) * _TileWorldSize;
+    float2 uv         = (worldXZ - tileOrigin) / _TileWorldSize;
+
+    float h;
+    if (td.lodLevel == 0)
+        h = _HeightTexLOD0.SampleLevel(sampler_HeightTexLOD0, float3(uv, td.arrayIndex), 0).r;
+    else if (td.lodLevel == 1)
+        h = _HeightTexLOD1.SampleLevel(sampler_HeightTexLOD1, float3(uv, td.arrayIndex), 0).r;
+    else
+        h = _HeightTexLOD2.SampleLevel(sampler_HeightTexLOD2, float3(uv, td.arrayIndex), 0).r;
+
+    height = h * _HeightScale;
+    return true;
 }
 
-
-float sdSphere(float3 p, float r)
+// Convenience wrapper returning 0 for out-of-range (used in normal estimation)
+float sampleHeightRaw(float2 worldXZ)
 {
-    float3 spherePos = float3(0, 1.0, 5.0);
-    float radius = r;
-
-    return length(p - spherePos) - radius;
+    float h;
+    sampleHeight(worldXZ, h);
+    return h;
 }
 
-float plane(float3 p)
-{
-    return p.y;
-}
-
-float sampleHeight(float2 worldXZ, float lod)
-{
-   // float2 uv = (worldXZ - _TerrainOrigin) / _TerrainSize;
-   // float2 uv = saturate((worldXZ - _TerrainOrigin) / _TerrainSize);
-    float2 uv = (worldXZ - _TerrainOrigin) / _TerrainSize;
-
-
-   // return _HeightTex.SampleLevel(sampler_HeightTex, uv, 0) * _HeightScale;
-    return _HeightTex.SampleLevel(sampler_HeightTex, uv, lod).r * _HeightScale;
-
-}
-
+// -------------------------------------------------------------------------
+// SDF
+// -------------------------------------------------------------------------
 float map(float3 p)
 {
-    float2 uv = (p.xz - _TerrainOrigin) / _TerrainSize;
-
-    // outside terrain no surface
-    if (uv.x < 0 || uv.y < 0 || uv.x > 1 || uv.y > 1)
+    float h;
+    if (!sampleHeight(p.xz, h))
         return 1e6;
-    
-    float h = sampleHeight(p.xz,0);
-    
-    
+
     return p.y - h;
-    
 }
 
+// -------------------------------------------------------------------------
+// Ray march — relaxed stepping (0.9×) avoids overstepping on slopes;
+// minimum step prevents infinite stall on flat terrain
+// -------------------------------------------------------------------------
 bool trace(float3 ro, float3 rd, out float t)
 {
-    
     t = 0.01;
 
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 512; i++)
     {
         float3 pos = ro + rd * t;
-        float d = map(pos);
+        float  d   = map(pos);
 
-        if (d < 0.0001)
+        if (d < 0.1)
             return true;
 
-        t += d;
+        t += max(d * 0.9, 0.5);
 
-        if (t > 4000.0f)
+        if (t > _MaxRayDistance)
             return false;
     }
 
     return false;
 }
 
-//float3 calcNormal(float3 p)
-//{
-//    float eps = 0.001;
-
-//    float dx = map(p + float3(eps, 0, 0)) - map(p - float3(eps, 0, 0));
-//    float dy = map(p + float3(0, eps, 0)) - map(p - float3(0, eps, 0));
-//    float dz = map(p + float3(0, 0, eps)) - map(p - float3(0, 0, eps));
-//    return normalize(float3(dx, dy, dz));
-//}
-
-float3 calcNormal(float3 p, float t)
+// -------------------------------------------------------------------------
+// Normal — world-space finite differences, step scales with distance
+// -------------------------------------------------------------------------
+float3 calcTerrainNormal(float3 p, float t)
 {
-    //float eps = max(0.05, t * 0.0005);
-    //float3 e = float3(eps, 0, 0);
+    float eps = clamp(t * 0.00025, 0.5, 4.0);
 
-    //float dx = map(p + e.xyy) - map(p - e.xyy);
-    //float dy = map(p + e.yxy) - map(p - e.yxy);
-    //float dz = map(p + e.yyx) - map(p - e.yyx);
-    //return normalize(float3(dx, dy, dz));
-    
-    
-    float eps = max(0.01, t * 0.00025);
-    eps = min(eps, 0.1);
+    float hxP = sampleHeightRaw(p.xz + float2( eps, 0));
+    float hxN = sampleHeightRaw(p.xz + float2(-eps, 0));
+    float hzP = sampleHeightRaw(p.xz + float2(0,  eps));
+    float hzN = sampleHeightRaw(p.xz + float2(0, -eps));
 
-    // brug glattere heightfelt til normal
-    float hx1 = sampleHeight(p.xz + float2(eps, 0), 2);
-    float hx2 = sampleHeight(p.xz + float2(-eps, 0), 2);
-    float hz1 = sampleHeight(p.xz + float2(0, eps), 2);
-    float hz2 = sampleHeight(p.xz + float2(0, -eps), 2);
-
-    float3 n = float3(
-        hx2 - hx1,
-        2.0 * eps,
-        hz2 - hz1
-    );
-
-    return normalize(n);
+    return normalize(float3(hxN - hxP, 2.0 * eps, hzN - hzP));
 }
 
-float3 calcTerrainNormal(float3 p)
+float lambert(float3 n, float3 l)
 {
-    float2 uv = (p.xz - _TerrainOrigin) / _TerrainSize;
-    float _TerrainResolution = _TerrainSize.x;
-    float texel = 1.0 / _TerrainResolution;
-
-    float hL = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(-texel, 0), 0).r;
-    float hR = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(texel, 0), 0).r;
-    float hD = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(0, -texel), 0).r;
-    float hU = _HeightTex.SampleLevel(sampler_HeightTex, uv + float2(0, texel), 0).r;
-
-    float3 n = float3(
-        hL - hR,
-        2.0 / _HeightScale,
-        hD - hU
-    );
-
-    return normalize(n);
+    return max(dot(n, l), 0.0);
 }
 
-
+// -------------------------------------------------------------------------
+// Main kernel
+// -------------------------------------------------------------------------
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= Width || id.y >= Height)
         return;
 
-
-    //float aspect = (float) Width / (float) Height;
     float2 uv = (id.xy / float2(Width, Height)) * 2.0 - 1.0;
     uv.x *= _CamAspect;
 
-    //float4 clip = float4(uv, -1, 1);
-
-
-
-    
-
-   
-    // World space ray
-   // float z = 1.0 / tan(_CamFov * 0.5);
-    float fov = radians(_CamFov);
-    float3 worldDir = normalize(_CamForward + uv.x * _CamRight * tan(fov * 0.5) + uv.y * _CamUp * tan(fov * 0.5));
-   // float3 worldDir = normalize(uv.x * _CamRight + uv.y * _CamUp + z * _CamForward);
-    float3 ro = _CamPos;
-    
-
-   // Result[id.xy] = float4(1, 0, 1, 1);
-    
-    
-
+    float  tanHalfFov = tan(radians(_CamFov) * 0.5);
+    float3 worldDir   = normalize(_CamForward
+                                + uv.x * _CamRight * tanHalfFov
+                                + uv.y * _CamUp    * tanHalfFov);
     float t;
-    bool hit = trace(ro, worldDir, t);
+    bool hit = trace(_CamPos, worldDir, t);
+
     if (hit)
     {
-        float3 hitPos = ro + worldDir * t;
-        float3 normal = calcTerrainNormal(hitPos);
-        float3 l = normalize(_LightDir);
-        float diffuse = lambert(normal, l);
+        float3 hitPos  = _CamPos + worldDir * t;
+        float3 normal  = calcTerrainNormal(hitPos, t);
+        float  diffuse = lambert(normal, normalize(_LightDir));
+        float3 color   = float3(1, 1, 1) * (0.1 + diffuse);
 
-       
-        //if (dot(worldDir, normal) > 0)
-        //{
-        //    Result[id.xy] = float4(0, 0, 0, 0);
-        //    ResultDepth[id.xy] = _MaxDistance;
-        //    return;
-        //}
-        
-
-        // Albedo color
-        float3 albedo = float3(1.0, 1.0, 1.0);
-        
-        //ambientcolor
-        float ambient = 0.1;
-        
-        // Final color
-        float3 color = albedo * (ambient + diffuse);
-       // color = float3(1, 1, 1);
-        
-        Result[id.xy] = float4(color, 1);
-        
-        //float3 n = calcNormal(hitPos, t);
-        //Result[id.xy] = float4(n * 0.5 + 0.5, 1);
-       
+        Result[id.xy]      = float4(color, 1);
         ResultDepth[id.xy] = t;
-        
     }
     else
     {
-        Result[id.xy] = float4(0, 0, 0, 0);
-        ResultDepth[id.xy] = _MaxDistance;
+        Result[id.xy]      = float4(0, 0, 0, 0);
+        ResultDepth[id.xy] = _MaxRayDistance;
     }
-    
-    return;
 }
-    
-
-    
-
-  
-   
-    
-
