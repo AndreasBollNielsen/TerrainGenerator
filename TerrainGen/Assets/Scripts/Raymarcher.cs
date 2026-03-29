@@ -61,6 +61,7 @@ public class Raymarcher : MonoBehaviour
         computeShader.SetFloat("_HeightScale", 2000.0f);
         computeShader.SetVector("_TerrainOrigin", terrainOrigin);
 
+    
 
     }
 

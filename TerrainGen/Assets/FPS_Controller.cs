@@ -60,13 +60,13 @@ public class FPS_Controller : MonoBehaviour
         float previousYVelocity = moveDirection.y;
         Debug.Log($"Previous Y velocity: {previousYVelocity}");
 
-        // Vandret bevægelse
+        // Vandret bevï¿½gelse
         moveDirection = (forward * curSpeedX) + (right * curSpeedZ);
 
         // Behold tidligere Y velocity
         moveDirection.y = previousYVelocity;
 
-        // Flyt horisontalt først
+        // Flyt horisontalt fï¿½rst
         Vector3 horizontalMove = new Vector3(moveDirection.x, 0, moveDirection.z);
         characterController.Move(horizontalMove * Time.deltaTime);
 
@@ -79,7 +79,7 @@ public class FPS_Controller : MonoBehaviour
         float targetGroundY = terrainHeight + playerHeight;
         float distanceToGround = transform.position.y - targetGroundY;
         float test = targetGroundY - terrainHeight;
-            Debug.Log($"target y: {targetGroundY} distance to ground: {distanceToGround} y position: {pos.y} movedirection:{moveDirection.y}");
+        //    Debug.Log($"target y: {targetGroundY} distance to ground: {distanceToGround} y position: {pos.y} movedirection:{moveDirection.y}");
         if (distanceToGround <= 0.05f)
         {
             moveDirection.y = -2f; // holder den grounded
@@ -109,7 +109,7 @@ public class FPS_Controller : MonoBehaviour
             Debug.Log("HIT BELOW: " + flags);
         }
 
-        // Tving position (sikrer præcis grounding)
+        // Tving position (sikrer prï¿½cis grounding)
         //transform.position = new Vector3(transform.position.x, pos.y, transform.position.z);
 
         // Kamera rotation

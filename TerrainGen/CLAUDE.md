@@ -9,7 +9,7 @@ Current branch: `raymarching-terrain`
 
 ## Architecture
 
-### Primary System — Octree Ray Marching (`Assets/Scripts/Octree/`)
+### Primary System — Octree Ray Marching (`Assets/Scripts/`)
 This is the active focus of the project.
 
 | File | Role |
@@ -32,13 +32,20 @@ This is the active focus of the project.
 - `_CamPos/Forward/Right/Up/Fov/Aspect` — updated every frame from `Camera.main`
 - Dispatched at `width/8 × height/8` thread groups
 
-### Legacy Ray Marching (`Assets/Scripts/VoxelRender/`)
-Older prototype kept for reference. Uses `OnRenderImage` instead of HDRP CustomPass.
-
+### Tile Streaming (`Assets/Scripts/`)
 | File | Role |
 |------|------|
-| `RayMarchingCamera.cs` | Image-effect style ray march applied to camera |
-| `TextureGenerator.cs` | Generates 64³ 3D Perlin noise texture for volumetric marching |
+| `TerrainTile.cs` | Plain C# data container: `gridPosition`, `worldPosition`, `lodLevel`, `heightmap`, `isDirty` |
+| `TileManager.cs` | MonoBehaviour managing a 7×7 sliding tile grid around the camera; streams heightmaps from `Resources/Textures/Heightmap_X_Y`; sets mipmap bias per LOD ring; exposes `GetVisibleTiles()` |
+
+**LOD rings (Chebyshev distance from centre tile):**
+- Distance 0–1 (3×3) → LOD 0, mip bias 0
+- Distance 2 (5×5 ring) → LOD 1, mip bias 1
+- Distance 3 (outermost ring) → LOD 2, mip bias 2
+
+**TileManager inspector fields:** `cameraTransform`, `tileWorldSize` (default 2048), `gridRadius` (default 3)
+
+> Raymarcher.cs integration is deferred — TileManager is data/streaming only for now.
 
 ### Shaders (`Assets/Shaders/`)
 | File | Role |
@@ -54,7 +61,7 @@ Older prototype kept for reference. Uses `OnRenderImage` instead of HDRP CustomP
 |------|-------|
 | `Assets/FPS_Controller.cs` | First-person camera/movement controller for navigating the scene |
 | `Assets/Editor/generator_editorTool.cs` | EditorWindow for terrain generation utilities |
-| `Assets/Scripts/Octree/NewBehaviourScript.cs` | Placeholder — unused |
+| `Assets/Scripts/NewBehaviourScript.cs` | Placeholder — unused |
 
 ---
 
@@ -68,4 +75,4 @@ Older prototype kept for reference. Uses `OnRenderImage` instead of HDRP CustomP
 ## Notes
 - The `RaymarchDepthPass .cs` filename has a trailing space — be careful with file operations on this file
 - `NewBehaviourScript.cs` in the Octree folder is unused and can be removed when tidying up
-- The `VoxelRender` system is legacy; the Octree pipeline supersedes it
+- The `RaymarchDepthPass.cs` file previously had a trailing space in its filename — confirm it's resolved before doing file operations on it
