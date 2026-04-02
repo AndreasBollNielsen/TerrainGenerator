@@ -11,6 +11,8 @@ public class FPS_Controller : MonoBehaviour
     public Camera playerCamera;
     public float lookSpeed = 2.0f;
     public float lookXLimit = 45.0f;
+    public float flySpeedMultiplier = 3.0f;
+    public float groundSnapSpeed = 10f;
 
     public Texture2D heightMap;
     public Vector2 terrainOrigin;
@@ -24,6 +26,7 @@ public class FPS_Controller : MonoBehaviour
     CharacterController characterController;
     Vector3 moveDirection = Vector3.zero;
     float rotationX = 0;
+    bool flyMode = false;
 
     [HideInInspector]
     public bool canMove = true;
@@ -50,69 +53,77 @@ public class FPS_Controller : MonoBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.F))
+            flyMode = !flyMode;
+
         Vector3 forward = transform.TransformDirection(Vector3.forward);
         Vector3 right = transform.TransformDirection(Vector3.right);
 
         bool isRunning = Input.GetKey(KeyCode.LeftShift);
-        float curSpeedX = canMove ? (isRunning ? runningSpeed : walkingSpeed) * Input.GetAxis("Vertical") : 0;
-        float curSpeedZ = canMove ? (isRunning ? runningSpeed : walkingSpeed) * Input.GetAxis("Horizontal") : 0;
+        float speed = isRunning ? runningSpeed : walkingSpeed;
 
-        float previousYVelocity = moveDirection.y;
-        Debug.Log($"Previous Y velocity: {previousYVelocity}");
-
-        // Vandret bev�gelse
-        moveDirection = (forward * curSpeedX) + (right * curSpeedZ);
-
-        // Behold tidligere Y velocity
-        moveDirection.y = previousYVelocity;
-
-        // Flyt horisontalt f�rst
-        Vector3 horizontalMove = new Vector3(moveDirection.x, 0, moveDirection.z);
-        characterController.Move(horizontalMove * Time.deltaTime);
-
-        // Terrain grounding
-        Vector3 pos = transform.position;
-        float terrainHeight = SampleHeightCPU(pos.x, pos.z);
-
-        bool grounded = false;
-
-        float targetGroundY = terrainHeight + playerHeight;
-        float distanceToGround = transform.position.y - targetGroundY;
-        float test = targetGroundY - terrainHeight;
-        //    Debug.Log($"target y: {targetGroundY} distance to ground: {distanceToGround} y position: {pos.y} movedirection:{moveDirection.y}");
-        if (distanceToGround <= 0.05f)
+        if (flyMode)
         {
-            moveDirection.y = -2f; // holder den grounded
-            grounded = true;
-            Debug.Log("Grounded! Current Y velocity set to: " + moveDirection.y);
+            if (canMove)
+            {
+                float flySpeed = speed * flySpeedMultiplier;
+                float curSpeedX = flySpeed * Input.GetAxis("Vertical");
+                float curSpeedZ = flySpeed * Input.GetAxis("Horizontal");
+                float curSpeedY = flySpeed * (Input.GetKey(KeyCode.Space) ? 1f : Input.GetKey(KeyCode.LeftControl) ? -1f : 0f);
+
+                Vector3 flyMove = (forward * curSpeedX) + (right * curSpeedZ) + (Vector3.up * curSpeedY);
+                characterController.Move(flyMove * Time.deltaTime);
+            }
         }
         else
         {
-            moveDirection.y -= gravity * Time.deltaTime;
+            float curSpeedX = canMove ? speed * Input.GetAxis("Vertical") : 0;
+            float curSpeedZ = canMove ? speed * Input.GetAxis("Horizontal") : 0;
 
-            grounded = false;
+            float previousYVelocity = moveDirection.y;
+            moveDirection = (forward * curSpeedX) + (right * curSpeedZ);
+            moveDirection.y = previousYVelocity;
+
+            // Horizontal move
+            Vector3 horizontalMove = new Vector3(moveDirection.x, 0, moveDirection.z);
+            characterController.Move(horizontalMove * Time.deltaTime);
+
+            // Terrain grounding — sample AFTER horizontal move so slope is accounted for
+            float terrainHeight = SampleHeightCPU(transform.position.x, transform.position.z);
+
+            float targetGroundY = terrainHeight + playerHeight;
+            float distanceToGround = transform.position.y - targetGroundY;
+            bool grounded = false;
+
+            if (distanceToGround <= 0.15f)
+            {
+                grounded = true;
+            }
+            else
+            {
+                moveDirection.y -= gravity * Time.deltaTime;
+            }
+
+            // Jump — checked before grounding snap so it isn't zeroed out the same frame
+            if (Input.GetKeyDown(KeyCode.Space) && canMove && grounded)
+            {
+                moveDirection.y = jumpSpeed;
+                grounded = false;
+            }
+
+            if (grounded)
+            {
+                moveDirection.y = 0f;
+                float snappedY = Mathf.Lerp(transform.position.y, targetGroundY, groundSnapSpeed * Time.deltaTime);
+                characterController.Move(Vector3.up * (snappedY - transform.position.y));
+            }
+            else
+            {
+                characterController.Move(Vector3.up * moveDirection.y * Time.deltaTime);
+            }
         }
 
-        // Jump
-        if (Input.GetKeyDown(KeyCode.Space) && canMove && grounded)
-        {
-            moveDirection.y = jumpSpeed;
-            Debug.Log("Jumping! Current Y velocity: " + moveDirection.y);
-        }
-
-        // Flyt vertikalt
-        characterController.Move(Vector3.up * moveDirection.y * Time.deltaTime);
-
-        var flags = characterController.Move(Vector3.up * moveDirection.y * Time.deltaTime);
-        if ((flags & CollisionFlags.Below) != 0)
-        {
-            Debug.Log("HIT BELOW: " + flags);
-        }
-
-        // Tving position (sikrer pr�cis grounding)
-        //transform.position = new Vector3(transform.position.x, pos.y, transform.position.z);
-
-        // Kamera rotation
+        // Camera rotation
         if (canMove)
         {
             rotationX += -Input.GetAxis("Mouse Y") * lookSpeed;
@@ -124,9 +135,23 @@ public class FPS_Controller : MonoBehaviour
 
     float SampleHeightCPU(float worldX, float worldZ)
     {
-        int x = Mathf.Clamp(Mathf.RoundToInt(worldX), 0, heightResolution - 1);
-        int z = Mathf.Clamp(Mathf.RoundToInt(worldZ), 0, heightResolution - 1);
+        float fx = Mathf.Clamp(worldX, 0f, heightResolution - 1);
+        float fz = Mathf.Clamp(worldZ, 0f, heightResolution - 1);
 
-        return heightData[x, z] * heightScale;
+        int x0 = Mathf.Min((int)fx, heightResolution - 2);
+        int z0 = Mathf.Min((int)fz, heightResolution - 2);
+        int x1 = x0 + 1;
+        int z1 = z0 + 1;
+
+        float tx = fx - x0;
+        float tz = fz - z0;
+
+        float h00 = heightData[x0, z0];
+        float h10 = heightData[x1, z0];
+        float h01 = heightData[x0, z1];
+        float h11 = heightData[x1, z1];
+
+        float h = Mathf.Lerp(Mathf.Lerp(h00, h10, tx), Mathf.Lerp(h01, h11, tx), tz);
+        return h * heightScale;
     }
 }
